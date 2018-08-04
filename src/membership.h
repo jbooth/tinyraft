@@ -26,14 +26,15 @@ extern "C" {
 #include <stdint.h>
 #include <uuid/uuid.h>
 #include <sys/socket.h>
+#include "rpc.h"
 
-#define MAX_PEERS=15
+#define MAX_PEERS 15
 
 /** Represents a member of the cluster. */
 typedef struct peer {
-  peer_id uuid_t;
-  addr struct sockaddr;
-  addrlen socklen_t;
+  uuid_t peer_id;
+  struct sockaddr *addr;
+  socklen_t addrlen;
 } peer;
 
 /** 
@@ -42,30 +43,24 @@ typedef struct peer {
 	* Updateable by RPC to leader.
 	*/
 typedef struct peer_set {
-	cluster_peer peers[MAX_PEERS];
-  num_peers uint8_t;
+	peer peers[MAX_PEERS];
+  uint8_t num_peers;
 } peer_set;
 
 /** Non-threadsafe set of clients */
 typedef struct client_set {
-  rpc_client[MAX_PEERS] clients;
+  rpc_client clients[MAX_PEERS];
   int num_clients;
-}
+} client_set;
 
 typedef struct cluster {
-	peer_set membership_old;
-	peer_set membership_new;
+	peer_set membership;
   client_set clients;
+} cluster;
 
-}
+int read_membership(unsigned char *file, peer_set *membership);
 
-typedef struct client_set {
-	cluster_membership *membership
-}
-
-int read_membership(unsigned char *file, cluster_membership *membership);
-
-int connect_clients(cluster_membership *membership, client_set *clients);
+int connect_clients(peer_set *membership, client_set *clients);
 
 #ifdef __cplusplus
 }

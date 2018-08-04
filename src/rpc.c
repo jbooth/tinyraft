@@ -88,12 +88,6 @@ static ssize_t read_full(int fd, void* buf, int count) {
 
 // client impl
 
-struct rpc_client {
-  uint32_t            next_reqno;      // incremented on send
-  uint32_t            last_resp_reqno; // incremented on recv
-  int sock_fd;
-};
-
 struct ts_rpc_client {
   rpc_client          client;
   pthread_mutex_t     write_lock;

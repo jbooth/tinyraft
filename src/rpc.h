@@ -31,7 +31,11 @@ extern "C" {
 int tinyraft_non_function(int i);
 
 /** RPC client handle */
-typedef struct rpc_client rpc_client; 
+typedef struct rpc_client {
+  uint32_t            next_reqno;      // incremented on send
+  uint32_t            last_resp_reqno; // incremented on recv
+  int sock_fd;
+} rpc_client; 
 
 /** Threadsafe RPC client handle */
 typedef struct ts_rpc_client ts_rpc_client;
@@ -111,7 +115,8 @@ void serve_clients(int accept_fd, struct sockaddr *addr, socklen_t addrlen, serv
 typedef struct client_idx {
   uint32_t  client_id;
   uint32_t  client_idx;
-}
+} client_idx; 
+
 /** Request sent to the leader to add entries to the cluster */
 typedef struct append_entries_hdr {
   uuid_t    leader_id;      // 16

@@ -23,7 +23,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include "include/tinyraft.h"
+#include "tinyraft.h"
 #include "rpc.h"
 
 /*
