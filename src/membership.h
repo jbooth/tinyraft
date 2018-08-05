@@ -26,16 +26,10 @@ extern "C" {
 #include <stdint.h>
 #include <uuid/uuid.h>
 #include <sys/socket.h>
+#include "tinyraft.h"
 #include "rpc.h"
 
 #define MAX_PEERS 15
-
-/** Represents a member of the cluster. */
-typedef struct peer {
-  uuid_t peer_id;
-  struct sockaddr *addr;
-  socklen_t addrlen;
-} peer;
 
 /** 
 	* Set of all peers in a given cluster.
