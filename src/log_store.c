@@ -51,15 +51,14 @@ typedef struct entries_header {
 
 // Metadata for an individual log entry, stored in the entries section of the log file.
 typedef struct log_entry {
-  uint64_t  term;         // 8
-  uint64_t  entry_pos;    // 16, pos of entry in data section
-  uint64_t  answer_pos;   // 24, pos of answer in answers file
-  uint32_t  entry_idx;    // 28
-  uint32_t  answer_len;   // 32
-  uint32_t  entry_len;    // 36
-  uint8_t   majority_committed; // 37, boolean
-  uint8_t   applied_local; // 38, boolean
-  uint8_t   padding[2];   // 40
+  uint64_t  entry_pos;    // 8, pos of entry in data section, points to beginning of AppendEntries header
+  uint64_t  answer_pos;   // 16, pos of answer in answers file
+  uint32_t  entry_idx;    // 20 index of this entry within the file's term
+  uint32_t  entry_len;    // 24 length of entry section including 64-byte AppendEntries header
+  uint32_t  answer_len;   // 28 length of answer section
+  uint8_t   majority_committed; // 29, boolean
+  uint8_t   applied_local; // 30, boolean
+  uint8_t   padding[2];   // 32
 } log_entry;
 
 // Each log_part has 3 files:
@@ -67,7 +66,6 @@ typedef struct log_entry {
 //  2) file of actual log contents (content_fd)
 //  3) file of answers produced by state machine (answers_fd)
 typedef struct term_log {
-
   // guarded by entries_lock
   pthread_mutex_t entries_lock;
   pthread_cond_t entries_changed;

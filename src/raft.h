@@ -22,41 +22,18 @@
 extern "C" {
 #endif
 
-
 #include <stdint.h>
 #include <uuid/uuid.h>
-#include <sys/socket.h>
-#include "tinyraft.h"
-#include "rpc.h"
 
-#define MAX_PEERS 15
+int handle_forward_entries() {
 
-/** 
-	* Set of all peers in a given cluster.
-	* Loaded from and periodically flushed to text file.
-	* Updateable by RPC to leader.
-	*/
-typedef struct peer_set {
-	peer peers[MAX_PEERS];
-  uint8_t num_peers;
-} peer_set;
+}
 
-/** Non-threadsafe set of clients */
-typedef struct client_set {
-  rpc_client clients[MAX_PEERS];
-  int num_clients;
-} client_set;
+int handle_replicate_entries() {
+    return 0;
+}
 
-typedef struct cluster_state {
-  peer leader;
-  ts_rpc_client leader_client;
-	peer_set membership;
-  client_set clients;
-} cluster_state;
 
-int read_membership(unsigned char *file, peer_set *membership);
-
-int connect_clients(peer_set *membership, client_set *clients);
 
 #ifdef __cplusplus
 }

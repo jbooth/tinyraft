@@ -88,12 +88,7 @@ static ssize_t read_full(int fd, void* buf, int count) {
 
 // client impl
 
-struct ts_rpc_client {
-  rpc_client          client;
-  pthread_mutex_t     write_lock;
-  pthread_mutex_t     read_lock;
-  pthread_cond_t      last_resp_changed;
-};
+
 
 resp_future send_request(rpc_client* client, generic_req* req) {
   resp_future resp;
@@ -234,7 +229,7 @@ struct server_state {
   socklen_t addrlen;
 };
 
-void serve_clients(int accept_fd, struct sockaddr* addr, socklen_t addrlen, server_handler handler) {
+int poll_once(int accept_fd, struct sockaddr* addr, socklen_t addrlen, server_handler handler) {
   struct epoll_event epoll_events[MAX_EVENTS];
   memset(&epoll_events, 0, sizeof(epoll_events) * MAX_EVENTS);
 
