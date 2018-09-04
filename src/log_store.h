@@ -19,7 +19,7 @@
 
 #include <pthread.h>
 #include <stdint.h>
-
+#include "wiretypes.h"
 
 // Log header, contains term-wide information.
 typedef struct entries_header {
@@ -40,6 +40,16 @@ typedef struct log_entry {
   uint8_t   applied_local; // 30, boolean
   uint8_t   padding[2];   // 32
 } log_entry;
+
+typedef struct log_entry_id {
+  uint64_t term;
+  uint32_t idx;
+} log_entry_id;
+
+typedef struct log_state {
+  log_entry_id last_committed;
+  log_entry_id quorum_committed;
+} log_state;
 
 /**
  * Represents 3 files (entries index, entries data and answers) for a single term.
@@ -66,3 +76,48 @@ typedef struct log_set {
   term_log logs[LOGS_RETAINED];
   pthread_rwlock_t membership_lock;
 } log_set;
+
+log_state ls_get_log_state(log_set *logs);
+
+/**
+ * Represents a contiguous chunk of entries in a termfile.
+ * first_entry and last_entry may be identical.
+ * 
+ * On first usage, initialize with 0s
+ */
+typedef struct send_queue {
+  log_id last_entry;
+  int fd;
+  off_t pos;
+  size_t count;
+} send_queue;
+
+/**
+ * Writes the given entry with header included.
+ */
+int write_log(log_set *logs, generic_req *append_entries_request, int socket);
+
+void set_quorum_cmt(log_set *logs, log_id quorum_committed);
+
+/**
+ * If there are subsequent entries to current_queue.last_entry, then 
+ * populate send_queue with information for future sendfile calls.
+ * 
+ * Used by replicator to forward entries.
+ * 
+ * Returns the number of logs added, or -1 on error.
+ */ 
+int wait_more(log_set* logs, send_queue *current_queue, int max_entries, int max_wait_ms);
+
+/**
+ * Uses sendfile to send a batch of entries.  Updates current_queue's state appropriately.
+ */
+ssize_t send_entries(int follower_fd, log_set* logs, send_queue *current_queue);
+
+/** Gets the max log ID we've recognized quorum for. */
+log_entry_id get_quorum_id(log_set *logs);
+
+/** Sets the provided ID as quorum iff it's after the current quorum.  Does not backtrack.  */
+void set_quorum_id(log_set *logs, log_entry_id quorum_id);
+
+int close(log_set* logs);

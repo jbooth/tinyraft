@@ -29,14 +29,6 @@ extern "C" {
 #define RPC_REQ_LEN 64 
 #define RPC_RESP_LEN 32
 
-/** Monotonically increasing per-client */
-typedef struct client_idx {
-  uint32_t  client_id;
-  uint32_t  client_idx;
-} client_idx;
-
-
-
 /** Request sent to the leader to add entries to the cluster */
 typedef struct forward_entries_req {
   uuid_t    leader_id;      // 16
@@ -45,17 +37,19 @@ typedef struct forward_entries_req {
   uint8_t   padding[32];    // 56
 } forward_entries_req;
 
-/** Request sent by the leader to replicate entries to the cluster */
+/** Request sent by the leader to replicate entries to the cluster.
+    Contains term and index for this entry, prev entry, and quorum entry.
+    If the values for 'this' are all 0, this is a heartbeat request.
+   */
 typedef struct append_entries_req {
   uuid_t    leader_id;      // 16
-  uint64_t  leader_term;    // 24
-  uint64_t  prev_log_term;  // 32
-  uint32_t  prev_log_idx;   // 36
-  uint32_t  ldr_commit_idx; // 40
-  uint32_t  ldr_apply_idx;  // 44
-  uint32_t  body_len;       // 50
-  uint32_t  num_args;       // 54
-  uint8_t   padding[2];     // 56
+  uint64_t  this_term;      // 24
+  uint64_t  prev_term;      // 32
+  uint64_t  quorum_term;    // 40
+  uint32_t  this_idx        // 44
+  uint32_t  prev_idx        // 48
+  uint32_t  quorum_idx;     // 52
+  uint32_t  body_len;       // 56
 } append_entries_req;
 
 
@@ -90,6 +84,14 @@ typedef struct would_vote_req {
   uint32_t      last_log_idx; // 52
   uint32_t      padding;      // 56
 } would_vote_req;
+
+typedef struct append_entries_resp {
+  uint64_t appended_term;    // 8
+  uint64_t quorum_term;      // 16
+  uint32_t appended_idx;     // 20
+  uint32_t quorum_idx;       // 24
+  uint8_t  padding[8];       // 32
+} append_entries_resp;
 
 #ifdef __cplusplus
 }

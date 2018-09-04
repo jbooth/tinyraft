@@ -86,10 +86,25 @@ static ssize_t read_full(int fd, void* buf, int count) {
   }
 }
 
-// client impl
+int send_req_raw(int fd, generic_req *req) {
+  int written = write_full(fd, (uint8_t*)req, RPC_REQ_LEN);
 
+  if (written < RPC_REQ_LEN) { 
+    return -1; 
+  } else { 
+    return 0; 
+  }
+}
 
+int read_resp_raw(int fd, generic_resp *resp) {
+  int read = read_full(fd, (uint8_t*)resp, RPC_REQ_LEN);
 
+  if (read < RPC_RESP_LEN) { 
+    return -1; 
+  } else { 
+    return 0;
+  }
+}
 resp_future send_request(rpc_client* client, generic_req* req) {
   resp_future resp;
   // set reqno on header and resp
@@ -221,13 +236,6 @@ static int serve_request(int client_fd, server_handler handler) {
   if (n < RPC_RESP_LEN) { return -1; }
   return 0;
 }
-
-struct server_state {
-  int accept_fd;
-  int epoll_fd;
-  struct sockaddr* addr;
-  socklen_t addrlen;
-};
 
 int poll_once(int accept_fd, struct sockaddr* addr, socklen_t addrlen, server_handler handler) {
   struct epoll_event epoll_events[MAX_EVENTS];

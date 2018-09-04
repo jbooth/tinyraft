@@ -22,8 +22,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
-
 #include "tinyraft.h"
+#include "log_store.h"
 #include "rpc.h"
 
 /*
@@ -39,27 +39,6 @@
  * We also have an answers file,  attached to term_log and pointed at by each entry's 
  * answer_pos, answer_len.
  */
-
-// Log header, contains term-wide information.
-typedef struct entries_header {
-  uint64_t term;              // 8
-  uint64_t max_entries;       // 16
-  uint32_t last_written_idx;  // 20
-  uint8_t  padding[12];       // 32 
-} entries_header;
-
-
-// Metadata for an individual log entry, stored in the entries section of the log file.
-typedef struct log_entry {
-  uint64_t  entry_pos;    // 8, pos of entry in data section, points to beginning of AppendEntries header
-  uint64_t  answer_pos;   // 16, pos of answer in answers file
-  uint32_t  entry_idx;    // 20 index of this entry within the file's term
-  uint32_t  entry_len;    // 24 length of entry section including 64-byte AppendEntries header
-  uint32_t  answer_len;   // 28 length of answer section
-  uint8_t   majority_committed; // 29, boolean
-  uint8_t   applied_local; // 30, boolean
-  uint8_t   padding[2];   // 32
-} log_entry;
 
 // Each log_part has 3 files:
 //  1) index of all entries, mmapped (entries_fd)
@@ -77,11 +56,6 @@ typedef struct term_log {
   int entries_fd; 
   int answers_fd;
 } term_log;
-
-static int get_header(term_log *lpart, uint32_t entry_idx, replicate_entries_hdr *dest) {
-  log_entry entry = lpart->entries[entry_idx];
-
-}
 
 static int get_entries(term_log* lpart, uint32_t last_entry_idx, log_entry* destination, int count) {
   // block until max_entry is something we haven't seen yet
@@ -140,7 +114,3 @@ typedef struct log_store {
   term_log*    previous;
   term_log*    current;
 } log_store;
-
-int insert_log_entry(log_store* lstore, append_entries_hdr* header, int contents_fd, char* response) {
-  return 0;
-}
