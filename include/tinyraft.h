@@ -27,6 +27,12 @@ extern "C" {
 #include <sys/uio.h>
 #include <uuid/uuid.h>
 
+/** Uniquely identifies an entry in the replicated log. */
+typedef struct tinyraft_entry_id {
+  uint64_t term_id;
+  uint32_t entry_id;
+} tinyraft_entry_id;
+
 /**
  * State machines do three things:
  * 1)  Have committed log entries applied to them to update their state.
@@ -49,7 +55,7 @@ typedef struct tinyraft_statemachine_ops {
      *  Note:  Must return error if assert_snapshot != the last taken snapshot.
      *  Note:  This will be called from a separate thread, it must be threadsafe.
      */
-    int (*streamout_snapshot_cb)(void *state_machine, int out_fd, logentry_id assert_snapshot);
+    int (*streamout_snapshot_cb)(void *state_machine, int out_fd, tinyraft_entry_id assert_snapshot);
 
 
     /** Delete all local state and stream in a snapshot.  */
@@ -67,22 +73,22 @@ typedef struct tinyraft_statemachine_ops {
      * If this method is null, the framework will use streamout_snapshot
      * and streamin_snapshot to manage snapshotting.
      */
-    int (*take_snapshot_cb)(void *state_machine, logentry_id entry_id);
+    int (*take_snapshot_cb)(void *state_machine, tinyraft_entry_id entry_id);
 
     /**
      * Optional, implement this if you implement take_snapshot_cb
      * Callback to retrieve the ID of the last taken snapshot.
      */
-    logentry_id (*get_last_snapshot_id_cb)(void *state_machine);
-} statemachine_ops;
+    tinyraft_entry_id (*get_last_snapshot_id_cb)(void *state_machine);
+} tinyraft_statemachine_ops;
 
 
 /** Multiplexing server that can run multiple raftlets on a single port. */ 
-typedef raft_server {
+typedef struct tinyraft_server {
   void * server_state;
-} raft_server;
+} tinyraft_server;
 
-typedef tinyraft_server_config {
+typedef struct tinyraft_server_config {
 } tinyraft_server_config;
 
 /** 
@@ -90,19 +96,19 @@ typedef tinyraft_server_config {
   * Points the provided ptr at it for usage in stop() and join() functions.
   * Server thread will clean up allocated resources on death.
   */
-int tinyraft_start_server(tinyraft_server_config config, raft_server *ptr); 
+int tinyraft_start_server(tinyraft_server_config config, tinyraft_server *ptr); 
 
 /** Requests shutdown of the provided server. */
-int tinyraft_stop_server(raft_server *server);
+int tinyraft_stop_server(tinyraft_server *server);
 
 /** Blocks until a server has actually shut down and released all resources. */
-int tinyraft_join_server(raft_server *server);
+int tinyraft_join_server(tinyraft_server *server);
 
 typedef struct raftlet {
-  uuid_t        cluster_id;
-  uuid_t        peer_id;
-  void          *state_machine; // Pointer to client-supplied state machine.
-  void          *server;        // Pointer to internal state
+  uuid_t                      cluster_id;
+  tinyraft_statemachine_ops   ops;
+  void                        *state_machine;
+  void                        *server_state;
 } raftlet;
 
 /** Configuration for a raftlet. */
@@ -145,25 +151,22 @@ int tinyraft_init_raftlet_storage(const char* storagepath, raftlet_config *confi
 
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
-  * Points provided double-pointer to the running raftlet for usage in tinyraft_stop_raftlet and tinyraft_join_raftlet
+  * Allocates all resources necessary to process entries and starts threads before returning.
+  * 
+  * 
   */
-int tinyraft_run_raftlet(const char *storagepath, tinyraft_server *server, raftlet **raftlet);
+int tinyraft_run_raftlet(const char *storagepath, tinyraft_server *server, tinyraft_statemachine_ops ops, void *state_machine, raftlet *raftlet);
 
 /**
   * Requests that a server stop running.  It will clean up all resources associated before threads terminate.
   */
-int tinyraft_stop_raftlet();
+int tinyraft_stop_raftlet(raftlet *raftlet);
 
 /**
   * Block until a raftlet has stopped running.
   */
-int tinyraft_join_raftlet();
+int tinyraft_join_raftlet(raftlet *raftlet);
 
-/** */
-int tinyraft_start_server(tinyraft_server *server, struct sockaddr *addr, socklen_t addrlen);
-
-/** Serves raft using the current thread for all calls to state machine except streamout_snapshot */
-int serve_raft(peer *peers, int num_peers, void *state_machine, statemachine_ops ops);
 
 
 #ifdef __cplusplus

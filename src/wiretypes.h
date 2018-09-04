@@ -46,8 +46,8 @@ typedef struct append_entries_req {
   uint64_t  this_term;      // 24
   uint64_t  prev_term;      // 32
   uint64_t  quorum_term;    // 40
-  uint32_t  this_idx        // 44
-  uint32_t  prev_idx        // 48
+  uint32_t  this_idx;       // 44
+  uint32_t  prev_idx;       // 48
   uint32_t  quorum_idx;     // 52
   uint32_t  body_len;       // 56
 } append_entries_req;

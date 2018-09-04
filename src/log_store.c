@@ -40,44 +40,6 @@
  * answer_pos, answer_len.
  */
 
-// Each log_part has 3 files:
-//  1) index of all entries, mmapped (entries_fd)
-//  2) file of actual log contents (content_fd)
-//  3) file of answers produced by state machine (answers_fd)
-typedef struct term_log {
-  // guarded by entries_lock
-  pthread_mutex_t entries_lock;
-  pthread_cond_t entries_changed;
-  entries_header* header;
-  log_entry* entries; 
-
-  // content_wl guards access to data section of file
-  pthread_mutex_t content_wl;
-  int entries_fd; 
-  int answers_fd;
-} term_log;
-
-static int get_entries(term_log* lpart, uint32_t last_entry_idx, log_entry* destination, int count) {
-  // block until max_entry is something we haven't seen yet
-  pthread_mutex_lock(&lpart->entries_lock);
-  log_entry* max_entry = &lpart->entries[lpart->header->last_written_idx];
-  while (max_entry->entry_idx > last_entry_idx) {
-    pthread_cond_wait(&lpart->entries_changed, &lpart->entries_lock);
-    max_entry = &lpart->entries[lpart->header->last_written_idx];
-  }
-  pthread_mutex_unlock(&lpart->entries_lock);
-
-  // copy
-  int entries_offset = last_entry_idx + 1;
-  int copied = 0;
-  while (count && entries_offset <= max_entry->entry_idx) {
-    destination[count] = lpart->entries[entries_offset];
-    entries_offset++;
-    copied++;
-    count--;
-  }
-  return copied;
-}
 
 static int close_log(term_log* lgpart) {
   munmap(lgpart->entries, lgpart->header->max_entries * sizeof(log_entry));
