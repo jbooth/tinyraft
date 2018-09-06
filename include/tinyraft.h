@@ -28,10 +28,10 @@ extern "C" {
 #include <uuid/uuid.h>
 
 /** Uniquely identifies an entry in the replicated log. */
-typedef struct tinyraft_entry_id {
-  uint64_t term_id;
-  uint32_t entry_id;
-} tinyraft_entry_id;
+typedef struct traft_entry_id {
+  uint64_t term_id; // Term ID this entry belongs to
+  uint32_t idx;     // Index within the term of this entry
+} traft_entry_id;
 
 /**
  * State machines do three things:
@@ -45,7 +45,7 @@ typedef struct tinyraft_entry_id {
  * All apply_log and snapshot creating commands are invoked 
  * by a single thread in a guaranteed order. 
  */
-typedef struct tinyraft_statemachine_ops {
+typedef struct traft_statemachine_ops {
     /** Callback to apply a log to our state machine */
     int(*apply_log_cb)(void *state_machine, struct iovec *entry);
 
@@ -55,7 +55,7 @@ typedef struct tinyraft_statemachine_ops {
      *  Note:  Must return error if assert_snapshot != the last taken snapshot.
      *  Note:  This will be called from a separate thread, it must be threadsafe.
      */
-    int (*streamout_snapshot_cb)(void *state_machine, int out_fd, tinyraft_entry_id assert_snapshot);
+    int (*streamout_snapshot_cb)(void *state_machine, int out_fd, traft_entry_id assert_snapshot);
 
 
     /** Delete all local state and stream in a snapshot.  */
@@ -73,40 +73,40 @@ typedef struct tinyraft_statemachine_ops {
      * If this method is null, the framework will use streamout_snapshot
      * and streamin_snapshot to manage snapshotting.
      */
-    int (*take_snapshot_cb)(void *state_machine, tinyraft_entry_id entry_id);
+    int (*take_snapshot_cb)(void *state_machine, traft_entry_id entry_id);
 
     /**
      * Optional, implement this if you implement take_snapshot_cb
      * Callback to retrieve the ID of the last taken snapshot.
      */
-    tinyraft_entry_id (*get_last_snapshot_id_cb)(void *state_machine);
-} tinyraft_statemachine_ops;
+    traft_entry_id (*get_last_snapshot_id_cb)(void *state_machine);
+} traft_statemachine_ops;
 
 
 /** Multiplexing server that can run multiple raftlets on a single port. */ 
-typedef struct tinyraft_server {
+typedef struct traft_server {
   void * server_state;
-} tinyraft_server;
+} traft_server;
 
-typedef struct tinyraft_server_config {
-} tinyraft_server_config;
+typedef struct traft_server_config {
+} traft_server_config;
 
 /** 
   * Allocates and starts a server listening to the provided address. 
   * Points the provided ptr at it for usage in stop() and join() functions.
   * Server thread will clean up allocated resources on death.
   */
-int tinyraft_start_server(tinyraft_server_config config, tinyraft_server *ptr); 
+int traft_start_server(traft_server_config config, traft_server *ptr); 
 
 /** Requests shutdown of the provided server. */
-int tinyraft_stop_server(tinyraft_server *server);
+int traft_stop_server(traft_server *server);
 
 /** Blocks until a server has actually shut down and released all resources. */
-int tinyraft_join_server(tinyraft_server *server);
+int traft_join_server(traft_server *server);
 
 typedef struct raftlet {
   uuid_t                      cluster_id;
-  tinyraft_statemachine_ops   ops;
+  traft_statemachine_ops   ops;
   void                        *state_machine;
   void                        *server_state;
 } raftlet;
@@ -133,11 +133,11 @@ typedef struct raftlet_config {
 } raftlet_config;
 
 /** Represents a member of the cluster. */
-typedef struct tinyraft_peer {
+typedef struct traft_peer {
   uuid_t peer_id;
   struct sockaddr *addr;
   socklen_t addrlen;
-} tinyraft_peer;
+} traft_peer;
 
 #define TINYRAFT_MAX_PEERS 15
 
@@ -147,7 +147,7 @@ typedef struct tinyraft_peer {
   * 
   * The configuration information will be considered entry 0 of term 0.  All real terms are >0.
   */
-int tinyraft_init_raftlet_storage(const char* storagepath, raftlet_config *config, tinyraft_peer *membership, uint8_t peer_count);
+int traft_init_raftlet_storage(const char* storagepath, raftlet_config *config, traft_peer *membership, uint8_t peer_count);
 
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
@@ -155,17 +155,17 @@ int tinyraft_init_raftlet_storage(const char* storagepath, raftlet_config *confi
   * 
   * 
   */
-int tinyraft_run_raftlet(const char *storagepath, tinyraft_server *server, tinyraft_statemachine_ops ops, void *state_machine, raftlet *raftlet);
+int traft_run_raftlet(const char *storagepath, traft_server *server, traft_statemachine_ops ops, void *state_machine, raftlet *raftlet);
 
 /**
   * Requests that a server stop running.  It will clean up all resources associated before threads terminate.
   */
-int tinyraft_stop_raftlet(raftlet *raftlet);
+int traft_stop_raftlet(raftlet *raftlet);
 
 /**
   * Block until a raftlet has stopped running.
   */
-int tinyraft_join_raftlet(raftlet *raftlet);
+int traft_join_raftlet(raftlet *raftlet);
 
 
 

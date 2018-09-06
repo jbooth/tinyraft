@@ -12,22 +12,23 @@ typedef struct logsender_state {
   int64_t             heartbeat_interval_ms;
   struct timeval      last_write_time;
   struct timeval      last_read_time;
-  log_entry_id        last_sent;
-  log_entry_id        remote_committed; // last committed log_entry_id on this follower
-  log_entry_id        remote_applied;   // last applied log_entry_id, i.e., this follower's opinion on quorum_committed
+  traft_entry_id   last_sent;
+  traft_entry_id   remote_committed; // last committed log_entry_id on this follower
+  traft_entry_id   remote_applied;   // last applied traft_entry_id, i.e., this follower's opinion on quorum_committed
   log_set             *entries; 
-  cluster_state       *cluster;
   int                 stop; // if true, write thread will terminate
-} follower_state;
+} logsender_state;
 
 
+
+#define MAX_PEERS 15
 
 typedef struct cluster_state {
   pthread_spinlock_t statelock;
-  log_entry_id       quorum_committed;
-  follower_state     followers[MAX_PEERS];
-  pthread_t          follower_writers[MAX_PEERS];
-  pthread_t          follower_readers[MAX_PEERS];
+  traft_entry_id  quorum_committed;
+  logsender_state    senders[MAX_PEERS];
+  pthread_t          sender_threads[MAX_PEERS];
+  pthread_t          supervisor;
   int8_t             num_followers;
   int                stop; // gets set to >0 if we want to stop trying to replicate
 } cluster_state;

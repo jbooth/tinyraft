@@ -44,8 +44,8 @@ typedef struct log_entry {
 } log_entry;
 
 typedef struct log_state {
-  tinyraft_entry_id last_committed;
-  tinyraft_entry_id quorum_committed;
+  traft_entry_id last_committed;
+  traft_entry_id quorum_committed;
 } log_state;
 
 /**
@@ -83,7 +83,7 @@ log_state ls_get_log_state(log_set *logs);
  * On first usage, initialize with 0s
  */
 typedef struct send_queue {
-  tinyraft_entry_id last_entry;
+  traft_entry_id last_entry;
   int fd;
   off_t pos;
   size_t count;
@@ -95,7 +95,7 @@ typedef struct send_queue {
  */
 int write_log(log_set *logs, generic_req *append_entries_request, int socket);
 
-void set_quorum_cmt(log_set *logs, tinyraft_entry_id quorum_committed);
+void set_quorum_cmt(log_set *logs, traft_entry_id quorum_committed);
 
 /**
  * If there are subsequent entries to current_queue.last_entry, then 
@@ -113,7 +113,7 @@ int wait_more(log_set* logs, send_queue *current_queue, int max_entries, int max
 ssize_t send_entries(int follower_fd, log_set* logs, send_queue *current_queue);
 
 /** Gets the max log ID we've recognized quorum for. */
-tinyraft_entry_id get_quorum_id(log_set *logs);
+traft_entry_id get_quorum_id(log_set *logs);
 
 /** Sets the provided ID as quorum iff it's after the current quorum.  Does not backtrack.  */
-void set_quorum_id(log_set *logs, tinyraft_entry_id quorum_id);
+void set_quorum_id(log_set *logs, traft_entry_id quorum_id);
