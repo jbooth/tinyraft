@@ -23,7 +23,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include "tinyraft.h"
-#include "log_store.h"
+#include "storage.h"
 #include "rpc.h"
 
 /*

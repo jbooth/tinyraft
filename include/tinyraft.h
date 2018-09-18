@@ -25,6 +25,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <sys/uio.h>
+#include <sys/socket.h>
 #include <uuid/uuid.h>
 
 /** Uniquely identifies an entry in the replicated log. */
@@ -135,7 +136,7 @@ typedef struct raftlet_config {
 /** Represents a member of the cluster. */
 typedef struct traft_peer {
   uuid_t peer_id;
-  struct sockaddr *addr;
+  struct sockaddr addr;
   socklen_t addrlen;
 } traft_peer;
 

@@ -29,49 +29,6 @@ extern "C" {
 #include "wiretypes.h"
 
 
-/* Request definitions */
-#define OPCODE_append_entries     1
-#define OPCODE_replicate_entries  2
-#define OPCODE_init_cluster       3
-#define OPCODE_add_server         4
-#define OPCODE_vote_req           5
-
-/** Shared request info, always the last 8 of the 64 request header bytes */
-typedef struct req_info {
-  uint32_t reqno;       // 4
-  uint8_t  opcode;      // 5
-  uint8_t  sys_msg;     // 6
-  uint8_t  padding[2];  // 8
-} req_info;
-
-/** Generic request header type, cast to this to call functions below */
-typedef struct generic_req {
-  union {
-    forward_entries_req forward_entries;
-    append_entries_req append_entries;
-    init_cluster_req init_cluster;
-    add_server_req add_server;
-    would_vote_req would_vote;
-    request_vote_req request_vote;
-  } message;
-  req_info  info;         // 64
-} generic_req;
-
-
-/** Shared resp info, always the last 8 of the 32 response bytes */
-typedef struct resp_info {
-  uint32_t reqno;
-  uint32_t status; 
-} resp_info;
-
-/** Generic response type, cast to this to call functions below */
-typedef struct generic_resp {
-  union {
-    append_entries_resp append_entries;
-  } message;
-  resp_info   info;
-} generic_resp;
-
 int tinyraft_non_function(int i);
 
 typedef struct rpc_conn {
