@@ -31,26 +31,34 @@ extern "C" {
 
 /** Request sent to the leader to add entries to the cluster */
 typedef struct forward_entries_req {
-  uuid_t    leader_id;      // 16
-  uint32_t  body_len;       // 20
-  uint32_t  num_args;       // 24
-  uint8_t   padding[32];    // 56
+  uint64_t  term_id;        // 8  Term we're trying to append to
+  uint32_t  client_idx;     // 12 Monotonically increasing per-client value, resets on new term
+  uint32_t  body_len;       // 16 
+  uint8_t   auth_tag[16];   // 32 Hardcoded length for auth tag, it's an IETF standard.
+  uint8_t   padding[32];    // 64
 } forward_entries_req;
 
-/** Request sent by the leader to replicate entries to the cluster.
-    Contains term and index for this entry, prev entry, and quorum entry.
-    If the values for 'this' are all 0, this is a heartbeat request.
-   */
+// Section used as 'additional data' for auth mac
+#define forward_entries_AD_len 16
+
+/** 
+  * Request sent by the leader to replicate entries to the cluster.
+  * Contains term and index for this entry, prev entry, and quorum entry.
+  * If the values for 'this' are all 0, this is a heartbeat request.
+  */
 typedef struct append_entries_req {
-  uuid_t    leader_id;      // 16
-  uint64_t  this_term;      // 24
-  uint64_t  prev_term;      // 32
-  uint64_t  quorum_term;    // 40
-  uint32_t  this_idx;       // 44
-  uint32_t  prev_idx;       // 48
-  uint32_t  quorum_idx;     // 52
-  uint32_t  body_len;       // 56
+  uint64_t  this_term;      // 8
+  uint64_t  prev_term;      // 16
+  uint64_t  quorum_term;    // 24
+  uint32_t  this_idx;       // 28
+  uint32_t  prev_idx;       // 32
+  uint32_t  quorum_idx;     // 36
+  uint32_t  body_len;       // 40
+  uint8_t   auth_tag[16];   // 56
+  uint8_t   padding[8];     // 64
 } append_entries_req;
+
+#define append_entries_AD_len 40
 
 
 typedef struct init_cluster_req {
@@ -93,7 +101,6 @@ typedef struct would_vote_req {
 
 /** Shared request info, always the last 8 of the 64 request header bytes */
 typedef struct req_info {
-  uint32_t reqno;       // 4
   uint8_t  opcode;      // 5
   uint8_t  sys_msg;     // 6
   uint8_t  padding[2];  // 8

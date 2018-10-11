@@ -109,7 +109,7 @@ resp_future send_request(rpc_client* client, generic_req* req) {
   resp_future resp;
   // set reqno on header and resp
   uint32_t next_reqno = client->next_reqno++;
-  req->info.reqno = next_reqno;
+  //req->info.reqno = next_reqno;
   resp.reqno      = next_reqno;
   // write it
   resp.written = write_full(client->sock_fd, (uint8_t*)req, RPC_REQ_LEN);

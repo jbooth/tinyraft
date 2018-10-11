@@ -7,6 +7,10 @@
 #include "rpc.h"
 #include "storage.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct logsender {
   pthread_spinlock_t  statelock;
   traft_peer          follower_info;
@@ -53,3 +57,8 @@ void stop_replicator(cluster_state *cluster);
 
 /** Waits until replicator terminated. */
 void join_replicator(cluster_state *cluster);
+
+#ifdef __cplusplus
+}
+#endif
+

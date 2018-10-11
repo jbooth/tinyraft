@@ -80,6 +80,8 @@ static void * write_follower(void *arg) {
         heartbeat_req.message.append_entries.quorum_idx = quorum_entry_id.idx;
         int err = send_req_raw(follower_fd, &heartbeat_req);
         if (err == -1) {
+          mark_down(sender, "Error sending heartbeat", errno);
+          return NULL;
         }
         gettimeofday(&now, NULL);
         pthread_spin_lock(&sender->statelock);
@@ -124,6 +126,13 @@ static inline int update_sender(logsender *sender, generic_resp *resp) {
   sender->remote_quorum.idx     = resp->message.append_entries.quorum_idx;
   err = err | pthread_spin_lock(&sender->statelock);
   return err;
+}
+
+// Sends heartbeat and dispatches sender thread
+// Sender thread will sleep until we've received
+// at least one heartbeat response.
+static int init_sender(logsender *sender) {
+  return 0;
 }
 
 // Multi-step process to init each sender:
@@ -211,21 +220,22 @@ static void * do_replicate_all(void *arg) {
     }
     for (int i = 0 ; i < num_ready ; i++) {
       int follower_fd = events[i].data.fd;
-      int err = read_resp_raw(follower_fd, &resp);
       pthread_spin_lock(&cluster->statelock);
-      if (err == -1) {
-        close(follower_fd);
-        // TODO kill sender
-      }
-                  
       logsender *sender = get_sender_for_fd(follower_fd, cluster);
-      if (sender == NULL) {
-        close(follower_fd);
-        // TODO kill sender
-      } else {
-        update_sender(sender, &resp);
-      }
       pthread_spin_unlock(&cluster->statelock);
+      if (sender == NULL) {
+        // TODO log something
+        close(follower_fd);
+        continue;
+      }
+      int err = read_resp_raw(follower_fd, &resp);
+      if (err == -1) {
+        mark_down(sender, "error reading response", errno);
+        continue;
+        // TODO kill sender
+      }
+
+      update_sender(sender, &resp);
     }
 
     // Check if any threads should be relaunched

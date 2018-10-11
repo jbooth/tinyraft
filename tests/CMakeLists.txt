@@ -1,5 +1,5 @@
 enable_testing()
 add_subdirectory(gtest)
-add_executable(run_all_tests all_tests.cpp test_rpc.cpp)
+add_executable(run_all_tests all_tests.cpp test_buffers.cpp)
 target_include_directories(run_all_tests PUBLIC "${TEST_INCLUDE_DIRS}")
-target_link_libraries(run_all_tests PUBLIC tinyraft gtest pthread)
+target_link_libraries(run_all_tests PUBLIC tinyraft gtest pthread sodium lz4)
