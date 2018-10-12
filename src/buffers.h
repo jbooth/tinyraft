@@ -51,7 +51,13 @@ int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_id
  */
 int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, append_entries_req *leader_header);
 
-int decode(buffers *b, int read_fd, size_t read_pos);
+/**
+ *  State machine function.  Used to read and decode an entry from the persisted log.  
+ *  We store the header in *header, and the body in b->main_buffer.
+ *  After this function completes, view_iovecs will work.
+ *  Note that we take no argument for file position.  It's the caller's responsibility to call lseek() before calling this function.
+ */
+int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *key);
 
 /** 
  * Copies a view of our decoded iovecs to the provided args

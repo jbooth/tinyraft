@@ -10,7 +10,7 @@
 #include "buffers.h"
 
 int init_buffs(buffers *b, size_t max_msg_size) {
-  if (sodium_init() == -1) {
+  if (SODIUM_LIBRARY_VERSION_MAJOR < 10 || sodium_init() == -1) {
     return -1;
   }
   b->max_msg_size = max_msg_size;
@@ -91,8 +91,8 @@ int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_id
   nonceval nonce;
   nonceForI32(client_idx, &nonce);
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-			body_section, &header->auth_tag[0], NULL, b->help_buffer, compressed_size, 
-			(unsigned char*) &header, forward_entries_AD_len, NULL, &nonce[0], key) == -1) {
+			body_section, header->auth_tag, NULL, b->help_buffer, compressed_size, 
+			(unsigned char*) &header, forward_entries_AD_len, NULL, nonce, key) == -1) {
 		return -1;
 	}
   return write_all(send_fd, b->main_buffer, b->message_size);
@@ -113,8 +113,8 @@ int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *
   // Authenticate and decrypt into help buffer using client nonce
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
       b->help_buffer, NULL, b->main_buffer, client_header->body_len, 
-      &client_header->auth_tag[0], (unsigned char*)&client_header, forward_entries_AD_len,
-      &client_nonce[0], key) == -1) {
+      client_header->auth_tag, (unsigned char*)&client_header, forward_entries_AD_len,
+      client_nonce, key) == -1) {
     return -1;
   }
   // Recrypt into main buffer with header, using log entry_idx as nonce
@@ -123,10 +123,34 @@ int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *
   memcpy(b->main_buffer, leader_header, RPC_REQ_LEN);
   uint8_t *body_section = b->main_buffer + RPC_REQ_LEN;
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-			body_section, &leader_header->auth_tag[0], NULL, b->help_buffer, leader_header->body_len, 
-			(unsigned char*) &leader_header, 40, NULL, &leader_nonce[0], key) == -1) {
+			body_section, leader_header->auth_tag, NULL, b->help_buffer, leader_header->body_len, 
+			(unsigned char*) &leader_header, append_entries_AD_len, NULL, leader_nonce, key) == -1) {
 		return -1;
 	}
+  return 0;
+}
+
+int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *key) {
+  // Read header to provided pointer, encrypted body to main buffer
+  if (read_all(read_fd, (uint8_t*)header, RPC_REQ_LEN) == -1) {
+    return -1;
+  }
+  if (read_all(read_fd, b->main_buffer, header->body_len) == -1) {
+    return -1;
+  }
+  // Decrypt to help buffer
+  nonceval nonce;
+  nonceForI32(header->this_idx, &nonce);
+  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+      b->help_buffer, NULL, b->main_buffer, header->body_len,
+      header->auth_tag, (unsigned char*)header, append_entries_AD_len,
+      nonce, key) == -1) {
+    return -1;
+  }
+  // Decompress back to main buffer
+  if (LZ4_decompress_safe((char*) b->help_buffer, (char*) b->main_buffer, header->body_len, b->buff_size) < 0) {
+    return -1;
+  }
   return 0;
 }
 

@@ -23,7 +23,7 @@
 #include "buffers.h"
 #include "buffers.c"
 
-TEST (BuffersTest, Writev) { 
+TEST (BuffersTest, ImportExport) { 
   buffers b;
 
   int buflen = 16;
@@ -45,6 +45,54 @@ TEST (BuffersTest, Writev) {
 
   ASSERT_EQ(20 + (4*16), b.message_size);
 
+  ASSERT_EQ(0, view_iovecs(&b, &vecs[0], 4));
+
+  for (int i = 0 ; i < 4 ; i++) {
+    ASSERT_EQ(0, memcmp(bufs[i], vecs[i].iov_base, buflen));
+  }
+
+  for (int i = 0 ; i < 4 ; i++) {
+    free(bufs[i]);
+  }
+  free_buffs(&b);
+}
+  
+
+TEST (BuffersTest, Encoding) { 
+  buffers b;
+
+  int buflen = 16;
+  int allBuffsLen = 1024 * 1024;
+  uint8_t *bufs[4];
+  for (int i = 0 ; i < 4 ; i++) {
+    bufs[i] = (uint8_t*)malloc(buflen);
+    randombytes_buf(bufs[i], buflen);
+  }
+  iovec vecs[4];
+  for (int i = 0 ; i < 4 ; i++) {
+    vecs[i].iov_base = &bufs[i][0];
+    vecs[i].iov_len = buflen;
+  }
+
+  // Encode through a pipe, transcode to a file, decode from file
+  int pipes[2];
+  ASSERT_EQ(0, pipe(pipes));
+  
+  char tmpfilename[12] = "/tmp/XXXXXX";
+  int tmp_fd = mkstemp(tmpfilename);
+  ASSERT_GT(0, tmp_fd);
+
+  unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
+  randombytes_buf(key, crypto_aead_chacha20poly1305_ietf_KEYBYTES);
+
+  int term_id = 1;
+  int client_idx = 2;
+  int entry_idx = 3;
+
+  ASSERT_EQ(0, init_buffs(&b, allBuffsLen));
+  ASSERT_EQ(0, encode_and_send(&b, pipes[0], term_id, client_idx, key, vecs, 4));
+  
+  ASSERT_EQ(20 + (4*16), b.message_size);
   ASSERT_EQ(0, view_iovecs(&b, &vecs[0], 4));
 
   for (int i = 0 ; i < 4 ; i++) {

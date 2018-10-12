@@ -38,7 +38,7 @@ typedef struct forward_entries_req {
   uint8_t   padding[32];    // 64
 } forward_entries_req;
 
-// Section used as 'additional data' for auth mac
+// Length, from front of struct, of section used as 'additional data' for MAC
 #define forward_entries_AD_len 16
 
 /** 
@@ -58,6 +58,7 @@ typedef struct append_entries_req {
   uint8_t   padding[8];     // 64
 } append_entries_req;
 
+// Length, from front of struct, of section used as 'additional data' for MAC
 #define append_entries_AD_len 40
 
 
