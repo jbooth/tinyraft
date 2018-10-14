@@ -17,6 +17,8 @@
 */
 
 #include <stdio.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <sys/uio.h>
 #include <string.h>
 #include "gtest/gtest.h"
@@ -57,8 +59,9 @@ TEST (BuffersTest, ImportExport) {
   free_buffs(&b);
 }
   
-
 TEST (BuffersTest, Encoding) { 
+  ASSERT_EQ(64, sizeof(forward_entries_req));
+  ASSERT_EQ(64, sizeof(append_entries_req));
   buffers b;
 
   int buflen = 16;
@@ -80,7 +83,7 @@ TEST (BuffersTest, Encoding) {
   
   char tmpfilename[12] = "/tmp/XXXXXX";
   int tmp_fd = mkstemp(tmpfilename);
-  ASSERT_GT(0, tmp_fd);
+  ASSERT_GT(tmp_fd, 0);
 
   unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
   randombytes_buf(key, crypto_aead_chacha20poly1305_ietf_KEYBYTES);
@@ -89,10 +92,31 @@ TEST (BuffersTest, Encoding) {
   int client_idx = 2;
   int entry_idx = 3;
 
+  // init buffers and send fwd_entries_req
   ASSERT_EQ(0, init_buffs(&b, allBuffsLen));
-  ASSERT_EQ(0, encode_and_send(&b, pipes[0], term_id, client_idx, key, vecs, 4));
+  ASSERT_EQ(0, encode_and_send(&b, pipes[1], term_id, client_idx, key, vecs, 4));
+  // transcode from leader side
+  // first, read fwd_entries_req from client
+  forward_entries_req fwd_req;
+  read_all(pipes[0], (uint8_t*) &fwd_req, RPC_REQ_LEN);
+	printf("client header body_len : %d \n", fwd_req.body_len);
+  // set up append_entries_req as if we're leader
+  append_entries_req leader_header;
+  leader_header.this_term = term_id;
+  leader_header.prev_term = term_id;
+  leader_header.quorum_term = term_id;
+  leader_header.this_idx = entry_idx;
+  leader_header.prev_idx = entry_idx - 1;
+  leader_header.quorum_idx = entry_idx - 1;
+  // leader transcode out to clients
+  ASSERT_EQ(0, transcode(&b, pipes[0], key, &fwd_req, &leader_header));
+	write_all(tmp_fd, b.main_buffer, b.message_size);
+	fsync(tmp_fd);
+
+  // read append_entries req from leader, follower-side
+	lseek(tmp_fd, 0, SEEK_SET);
+	ASSERT_EQ(0, decode(&b, &leader_header, tmp_fd, key));
   
-  ASSERT_EQ(20 + (4*16), b.message_size);
   ASSERT_EQ(0, view_iovecs(&b, &vecs[0], 4));
 
   for (int i = 0 ; i < 4 ; i++) {

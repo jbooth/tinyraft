@@ -5,6 +5,7 @@
 #include <sodium.h>
 #include <lz4.h>
 #include <sys/uio.h>
+#include "tinyraft.h"
 #include "wiretypes.h"
 
 #ifdef __cplusplus
@@ -47,6 +48,7 @@ int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_id
  *  with an append_entries_req containing a definitive index for this entry in this term.
  *  We also take the opportunity to reencrypt using that entry index as the nonce, since we have to recrypt anyways
  *  in order to sign our new header and attest to its accuracy.
+ *  Note:  leader_header should have all index information set, but no length or MAC.  We set that internally.
  *  Doesn't write to log storage.  See storage.c for that.
  */
 int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, append_entries_req *leader_header);
@@ -63,12 +65,6 @@ int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *k
  * Copies a view of our decoded iovecs to the provided args
  */
 int view_iovecs(buffers *b, struct iovec *args, int32_t max_args);
-
-/**
- * Used by encode_and_send to do initial import prior to encoding.  Exposed for testing.
- */
-int import_iovecs(buffers *b, struct iovec *args, int32_t num_args);
-
 
 #ifdef __cplusplus
 }

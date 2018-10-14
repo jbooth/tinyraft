@@ -34,8 +34,8 @@ typedef struct forward_entries_req {
   uint64_t  term_id;        // 8  Term we're trying to append to
   uint32_t  client_idx;     // 12 Monotonically increasing per-client value, resets on new term
   uint32_t  body_len;       // 16 
-  uint8_t   auth_tag[16];   // 32 Hardcoded length for auth tag, it's an IETF standard.
-  uint8_t   padding[32];    // 64
+  uint8_t   auth_tag[12];   // 28 Hardcoded length for auth tag, it's an IETF standard.
+  uint8_t   padding[36];    // 64
 } forward_entries_req;
 
 // Length, from front of struct, of section used as 'additional data' for MAC
