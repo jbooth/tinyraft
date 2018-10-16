@@ -36,8 +36,8 @@
  * Entries contains input to the state machine while answers contains output.
  * 
  * Contents of entries file have 3 sections:
- *  term_header    global info, mmapped as struct
- *  entry_md*     entry metadata table, mmappped and indexed by entry_idx
+ *  log_header    global info, mmapped as struct
+ *  log_entry_md*     entry metadata table, mmappped and indexed by entry_idx
  *  log_content   contents of AppendEntries requests on their way through the system
  * 
  * We also have an answers file,  attached to term_log and pointed at by each entry's 
@@ -45,10 +45,10 @@
  */
 
 static size_t header_entries_size(int num_entries) {
-  return sizeof(term_header) + (sizeof(entry_md) * num_entries);
+  return sizeof(traft_log_header) + (sizeof(traft_log_entry_md) * num_entries);
 }
 
-static int close_log(term_log* log) {
+static int close_log(traft_log_term_log* log) {
   munmap(log->header, log->map_len);
   close(log->entries_fd);
   close(log->answers_fd);
@@ -68,9 +68,9 @@ static void build_path(char *dest, const char *basedir, uint64_t term_id, const 
 }
 
 // Opens entries file and sets up mmaps, used by open_log and create_log
-static int map_entries(term_log *log, const char *entries_file) {
-  term_header header;
-  if (read(log->entries_fd, &header, sizeof(term_header)) == -1) { return -1; }
+static int map_entries(traft_log_term_log *log, const char *entries_file) {
+  traft_log_header header;
+  if (read(log->entries_fd, &header, sizeof(traft_log_header)) == -1) { return -1; }
   if (memcmp(header.magic, "RAFT", 4) != 0) {
     return -1;
   }
@@ -82,11 +82,11 @@ static int map_entries(term_log *log, const char *entries_file) {
   }
 
   log->map_len = map_len;
-  log->header = (term_header*) map;
-  log->entries = (entry_md*) (map + sizeof header);
+  log->header = (traft_log_header*) map;
+  log->entries = (traft_log_entry_md*) (map + sizeof header);
 }
 
-int open_log(term_log *log, const char *basedir, uint64_t term_id) {
+int traft_log_open(traft_log_term_log *log, const char *basedir, uint64_t term_id) {
   char file_path[4096]; // 4096 is excessive, but it's the posix max
   if (strnlen(basedir,4096) > 4000) {
     return -1;
@@ -104,7 +104,7 @@ int open_log(term_log *log, const char *basedir, uint64_t term_id) {
   return map_entries(log, file_path);
 }
 
-int create_log(term_log *log, const char *basedir, uint64_t term_id, uint32_t num_entries) {
+int traft_log_create(traft_log_term_log *log, const char *basedir, uint64_t term_id, uint32_t num_entries) {
   // create/allocate files
   char file_path[4096]; // 4096 is excessive, but it's the posix max
   if (strnlen(basedir,4096) > 4000) {
@@ -133,6 +133,6 @@ int create_log(term_log *log, const char *basedir, uint64_t term_id, uint32_t nu
 // We manage 2 log_parts:  current and previous
 // When current fills up, we delete previous and create a new one
 typedef struct log_store {
-  term_log*    previous;
-  term_log*    current;
+  traft_log_term_log*    previous;
+  traft_log_term_log*    current;
 } log_store;
