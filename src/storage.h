@@ -24,24 +24,24 @@
 #include "rpc.h"
 
 // Log header, contains term-wide information.
-typedef struct entries_header {
-  uint64_t term;              // 8
-  uint32_t max_entries;       // 12
-  uint32_t max_idx;           // 16
-  uint8_t  padding[16];       // 32 
-} entries_header;
+typedef struct term_header {
+  uint64_t term;              // 8  Term ID
+  uint32_t num_entries;       // 12 Number of entries we have space for in our mmap
+  uint32_t max_committed;     // 16 Highest entry idx that's been committed locally
+  uint32_t quorum_committed;  // 20 Highest entry idx that's been committed by a quorum
+  uint8_t  magic[4];          // 24 Always the characters 'RAFT'
+  uint8_t  padding[8];        // 32 
+} term_header;
 
 // Metadata for an individual log entry, stored in the entries section of the log file.
-typedef struct log_entry {
+// Indexed by this entry's IDX.  That is, term_log->entries[idx] will yield the metadata for that entry.
+typedef struct entry_md {
   uint64_t  entry_pos;    // 8, pos of entry in data section, points to beginning of AppendEntries header
   uint64_t  answer_pos;   // 16, pos of answer in answers file
-  uint32_t  entry_idx;    // 20 index of this entry within the file's term
-  uint32_t  entry_len;    // 24 length of entry section including 64-byte AppendEntries header
-  uint32_t  answer_len;   // 28 length of answer section
-  uint8_t   majority_committed; // 29, boolean
-  uint8_t   applied_local; // 30, boolean
-  uint8_t   padding[2];   // 32
-} log_entry;
+  uint32_t  entry_len;    // 20 length of entry section including 64-byte AppendEntries header
+  uint32_t  answer_len;   // 24 length of answer section
+  uint8_t   padding[8];   // 32
+} entry_md;
 
 typedef struct log_state {
   traft_entry_id last_committed;
@@ -50,20 +50,17 @@ typedef struct log_state {
 
 /**
  * Represents 3 files (entries index, entries data and answers) for a single term.
- * The entries index is an mmapped array of struct log_entrys with indexes into the 
+ * The entries index is an mmapped array of struct entry_mds with indexes into the 
  * entries_data file and the answers file.
  * The entries file is raw requests with their ReplicateEntries header in line.
  * The answers file contains output of executed commands.
  */
 typedef struct term_log {
-  // guarded by entries_lock
   pthread_mutex_t entries_lock;
   pthread_cond_t entries_changed;
-  entries_header* header;
-  log_entry* entries; 
-  int index_fd;
-
-  // data is unguarded -- only one thread writes to entries or answers
+  term_header *header;
+  entry_md *entries; 
+  size_t map_len; // mmap is shared between header and entries; starts at header and is map_len long
   int entries_fd; 
   int answers_fd;
 } term_log;
@@ -89,11 +86,15 @@ typedef struct send_queue {
   size_t count;
 } send_queue;
 
+int open_log(term_log *log, const char *basedir, uint64_t term_id);
+
+int create_log(term_log *log, const char *basedir, uint64_t term_id, uint32_t num_entries);
+
 /**
  * Writes the given entry with header included.
  * Req_info portion of append_entries_request can/should be zeroed, we don't look at it.
  */
-int write_log(log_set *logs, generic_req *append_entries_request, int socket);
+int write_entry(log_set *logs, generic_req *append_entries_request, int socket);
 
 void set_quorum_cmt(log_set *logs, traft_entry_id quorum_committed);
 

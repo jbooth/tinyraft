@@ -15,19 +15,19 @@ extern "C" {
 /**
  * Buffer utility struct to manage compression/encryption of messages in flight.
  */
-typedef struct buffers {
+typedef struct traft_buffers {
   uint8_t *main_buffer;
   uint8_t *help_buffer;
   size_t  max_msg_size;
   size_t  buff_size;
   size_t  message_size;
-} buffers;
+} traft_buffers;
 
-/** Allocates buffers using sodium_malloc */
-int init_buffs(buffers *b, size_t max_msg_size);
+/** Allocates traft_buffers using sodium_malloc */
+int traft_buf_alloc(traft_buffers *b, size_t max_msg_size);
 
-/** Frees associated buffers */
-void free_buffs(buffers *b);
+/** Frees associated traft_buffers */
+void traft_buf_free(traft_buffers *b);
 
 
 /**
@@ -39,7 +39,7 @@ void free_buffs(buffers *b);
  *    -- If the leader has moved on to a new term, this request will be rejected and we'll need to retry.
  *  Also note that we don't read any response in this function, it's a fire-and-forget.
  */
-int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_idx, 
+int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, int32_t client_idx, 
                     unsigned char *key, struct iovec *args_in, int32_t num_args);
 
 /**
@@ -51,7 +51,8 @@ int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_id
  *  Note:  leader_header should have all index information set, but no length or MAC.  We set that internally.
  *  Doesn't write to log storage.  See storage.c for that.
  */
-int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, append_entries_req *leader_header);
+int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, 
+                        forward_entries_req *client_header, append_entries_req *leader_header);
 
 /**
  *  State machine function.  Used to read and decode an entry from the persisted log.  
@@ -59,12 +60,12 @@ int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *
  *  After this function completes, view_iovecs will work.
  *  Note that we take no argument for file position.  It's the caller's responsibility to call lseek() before calling this function.
  */
-int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *key);
+int traft_buf_decode(traft_buffers *b, append_entries_req *header, int read_fd, unsigned char *key);
 
 /** 
  * Copies a view of our decoded iovecs to the provided args
  */
-int view_iovecs(buffers *b, struct iovec *args, int32_t max_args);
+int traft_buf_view_iovecs(traft_buffers *b, struct iovec *args, int32_t max_args);
 
 #ifdef __cplusplus
 }

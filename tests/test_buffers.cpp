@@ -26,7 +26,7 @@
 #include "buffers.c"
 
 TEST (BuffersTest, ImportExport) { 
-  buffers b;
+  traft_buffers b;
 
   int buflen = 16;
   int allBuffsLen = 1024 * 1024;
@@ -41,13 +41,13 @@ TEST (BuffersTest, ImportExport) {
     vecs[i].iov_len = buflen;
   }
 
-  ASSERT_EQ(0, init_buffs(&b, allBuffsLen));
+  ASSERT_EQ(0, traft_buf_alloc(&b, allBuffsLen));
 
   ASSERT_EQ(0, import_iovecs(&b, &vecs[0], 4));
 
   ASSERT_EQ(20 + (4*16), b.message_size);
 
-  ASSERT_EQ(0, view_iovecs(&b, &vecs[0], 4));
+  ASSERT_EQ(0, traft_buf_view_iovecs(&b, &vecs[0], 4));
 
   for (int i = 0 ; i < 4 ; i++) {
     ASSERT_EQ(0, memcmp(bufs[i], vecs[i].iov_base, buflen));
@@ -56,13 +56,13 @@ TEST (BuffersTest, ImportExport) {
   for (int i = 0 ; i < 4 ; i++) {
     free(bufs[i]);
   }
-  free_buffs(&b);
+  traft_buf_free(&b);
 }
   
 TEST (BuffersTest, Encoding) { 
   ASSERT_EQ(64, sizeof(forward_entries_req));
   ASSERT_EQ(64, sizeof(append_entries_req));
-  buffers b;
+  traft_buffers b;
 
   int buflen = 16;
   int allBuffsLen = 1024 * 1024;
@@ -93,13 +93,12 @@ TEST (BuffersTest, Encoding) {
   int entry_idx = 3;
 
   // init buffers and send fwd_entries_req
-  ASSERT_EQ(0, init_buffs(&b, allBuffsLen));
-  ASSERT_EQ(0, encode_and_send(&b, pipes[1], term_id, client_idx, key, vecs, 4));
+  ASSERT_EQ(0, traft_buf_alloc(&b, allBuffsLen));
+  ASSERT_EQ(0, traft_buf_encode_and_send(&b, pipes[1], term_id, client_idx, key, vecs, 4));
   // transcode from leader side
   // first, read fwd_entries_req from client
   forward_entries_req fwd_req;
   read_all(pipes[0], (uint8_t*) &fwd_req, RPC_REQ_LEN);
-	printf("client header body_len : %d \n", fwd_req.body_len);
   // set up append_entries_req as if we're leader
   append_entries_req leader_header;
   leader_header.this_term = term_id;
@@ -109,15 +108,15 @@ TEST (BuffersTest, Encoding) {
   leader_header.prev_idx = entry_idx - 1;
   leader_header.quorum_idx = entry_idx - 1;
   // leader transcode out to clients
-  ASSERT_EQ(0, transcode(&b, pipes[0], key, &fwd_req, &leader_header));
+  ASSERT_EQ(0, traft_buf_transcode(&b, pipes[0], key, &fwd_req, &leader_header));
 	write_all(tmp_fd, b.main_buffer, b.message_size);
 	fsync(tmp_fd);
 
   // read append_entries req from leader, follower-side
 	lseek(tmp_fd, 0, SEEK_SET);
-	ASSERT_EQ(0, decode(&b, &leader_header, tmp_fd, key));
+	ASSERT_EQ(0, traft_buf_decode(&b, &leader_header, tmp_fd, key));
   
-  ASSERT_EQ(0, view_iovecs(&b, &vecs[0], 4));
+  ASSERT_EQ(0, traft_buf_view_iovecs(&b, &vecs[0], 4));
 
   for (int i = 0 ; i < 4 ; i++) {
     ASSERT_EQ(0, memcmp(bufs[i], vecs[i].iov_base, buflen));
@@ -126,6 +125,6 @@ TEST (BuffersTest, Encoding) {
   for (int i = 0 ; i < 4 ; i++) {
     free(bufs[i]);
   }
-  free_buffs(&b);
+  traft_buf_free(&b);
 }
   

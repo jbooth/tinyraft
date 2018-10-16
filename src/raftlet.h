@@ -25,14 +25,10 @@ extern "C" {
 #include <stdint.h>
 #include <uuid/uuid.h>
 
-int handle_forward_entries() {
-
-}
-
-int handle_replicate_entries() {
-    return 0;
-}
-
+typedef struct raftlet {
+  fwd_client client; // Connection to leader for forwarding entries
+  
+} raftlet;
 
 
 #ifdef __cplusplus

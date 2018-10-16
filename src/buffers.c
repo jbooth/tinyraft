@@ -9,7 +9,7 @@
 #include "wiretypes.h"
 #include "buffers.h"
 
-int init_buffs(buffers *b, size_t max_msg_size) {
+int traft_buf_alloc(traft_buffers *b, size_t max_msg_size) {
   if (SODIUM_LIBRARY_VERSION_MAJOR < 10 || sodium_init() == -1) {
     return -1;
   }
@@ -27,7 +27,7 @@ int init_buffs(buffers *b, size_t max_msg_size) {
   return 0;
 }
 
-void free_buffs(buffers *b) {
+void traft_buf_free(traft_buffers *b) {
   sodium_free(b->main_buffer);
   sodium_free(b->help_buffer);
 }
@@ -41,7 +41,7 @@ static inline void nonceForI32(uint32_t i, nonceval *nonce) {
 }
 
 // Writes all.  Returns 0 on success, -1 on failure.
-static inline int write_all(int fd, uint8_t *buf, size_t count) {
+static int write_all(int fd, uint8_t *buf, size_t count) {
   while (count) {
     ssize_t w = write(fd, buf, count);
     if (w == -1) {
@@ -54,7 +54,7 @@ static inline int write_all(int fd, uint8_t *buf, size_t count) {
 }
 
 // Reads all.  Returns 0 on success, -1 on failure.
-static inline int read_all(int fd, uint8_t *buf, size_t count) {
+static int read_all(int fd, uint8_t *buf, size_t count) {
   while (count) {
     ssize_t r = read(fd, buf, count);
     if (r == -1) {
@@ -66,7 +66,7 @@ static inline int read_all(int fd, uint8_t *buf, size_t count) {
   return 0;
 }
 
-int import_iovecs(buffers *b, struct iovec *args, int32_t num_args) {
+static int import_iovecs(traft_buffers *b, struct iovec *args, int32_t num_args) {
   size_t total_size = 4;
   for (int i = 0 ; i < num_args ; i++) {
     if (args[i].iov_len > UINT32_MAX) {
@@ -93,7 +93,7 @@ int import_iovecs(buffers *b, struct iovec *args, int32_t num_args) {
   return 0;
 }
 
-int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_idx, 
+int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, int32_t client_idx, 
                     unsigned char *key, struct iovec *args, int32_t num_args) {
   // Import args into main buffer
   if (import_iovecs(b, args, num_args) == -1) {
@@ -161,7 +161,8 @@ int encode_and_send(buffers *b, int send_fd, uint64_t term_id, int32_t client_id
   return write_all(send_fd, b->main_buffer, b->message_size);
 }
 
-int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, append_entries_req *leader_header) {
+int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, 
+                        forward_entries_req *client_header, append_entries_req *leader_header) {
   printf("TRANSCODE \n\n");
   if (client_header->body_len > b->max_msg_size) {
     // TODO set errno
@@ -241,7 +242,7 @@ int transcode(buffers *b, int recv_fd, unsigned char *key, forward_entries_req *
   return 0;
 }
 
-int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *key) {
+int traft_buf_decode(traft_buffers *b, append_entries_req *header, int read_fd, unsigned char *key) {
   // Read header to provided pointer, encrypted body to main buffer
   if (read_all(read_fd, (uint8_t*)header, RPC_REQ_LEN) == -1) {
     printf("Error reading header\n");
@@ -277,7 +278,7 @@ int decode(buffers *b, append_entries_req *header, int read_fd, unsigned char *k
 }
 
 
-int view_iovecs(buffers *b, struct iovec *args, int32_t max_args) {
+int traft_buf_view_iovecs(traft_buffers *b, struct iovec *args, int32_t max_args) {
   int32_t *header_section = (int32_t*) b->main_buffer;
   int32_t data_num_args = header_section[0];
   int32_t num_args_to_return = data_num_args;
