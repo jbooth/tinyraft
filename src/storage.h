@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include "tinyraft.h"
 #include "wiretypes.h"
+#include "buffers.h"
 #include "rpc.h"
 
 // Log header, contains term-wide information.
@@ -95,7 +96,7 @@ int traft_log_create(traft_log_term_log *log, const char *basedir, uint64_t term
  * Writes the given entry with header included.
  * Req_info portion of append_entries_request can/should be zeroed, we don't look at it.
  */
-int write_entry(log_set *logs, generic_req *append_entries_request, int socket);
+int traft_log_write_entry(traft_log_term_log *log, traft_buffers *entry, uint32_t entry_idx);
 
 void set_quorum_cmt(log_set *logs, traft_entry_id quorum_committed);
 

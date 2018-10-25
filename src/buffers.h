@@ -48,11 +48,12 @@ int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, i
  *  with an append_entries_req containing a definitive index for this entry in this term.
  *  We also take the opportunity to reencrypt using that entry index as the nonce, since we have to recrypt anyways
  *  in order to sign our new header and attest to its accuracy.
- *  Note:  leader_header should have all index information set, but no length or MAC.  We set that internally.
+ * 
+ *  After this method completes, an append_entries_req header along with the body will be in b->main_buffer.
  *  Doesn't write to log storage.  See storage.c for that.
  */
-int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, 
-                        forward_entries_req *client_header, append_entries_req *leader_header);
+int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, 
+                        traft_entry_id this_entry, traft_entry_id prev_entry, traft_entry_id quorum_entry);
 
 /**
  *  State machine function.  Used to read and decode an entry from the persisted log.  

@@ -29,10 +29,6 @@ extern "C" {
 #include <uuid/uuid.h>
 
 /** Uniquely identifies an entry in the replicated log. */
-typedef struct traft_entry_id {
-  uint64_t term_id; // Term ID this entry belongs to
-  uint32_t idx;     // Index within the term of this entry
-} traft_entry_id;
 
 /**
  * State machines do three things:
@@ -41,46 +37,29 @@ typedef struct traft_entry_id {
  * 3)  Provide facility to stream that snapshot out to another node.
  * 
  * The user will likely want to interact with it in some other way, providing
- * read methods that access updated state, etc.  
+ * read methods that access state, etc.  
  * 
  * All apply_log and snapshot creating commands are invoked 
- * by a single thread in a guaranteed order. 
+ * by a single thread in a guaranteed order.  
+ * Streaming out a snapshot is done by a different thread.
  */
 typedef struct traft_statemachine_ops {
-    /** Callback to apply a log to our state machine */
-    int(*apply_log_cb)(void *state_machine, struct iovec *entry);
-
-
-
-    /** Stream out the last snapshot image we took. 
-     *  Note:  Must return error if assert_snapshot != the last taken snapshot.
-     *  Note:  This will be called from a separate thread, it must be threadsafe.
-     */
-    int (*streamout_snapshot_cb)(void *state_machine, int out_fd, traft_entry_id assert_snapshot);
-
+    /** Callback to apply a log entry to our state machine */
+    int(*apply_log_cb)(void *state_machine, struct iovec *entry, int num_args);
 
     /** Delete all local state and stream in a snapshot.  */
-    int (*streamin_snapshot_cb)(void *state_machine, int in_fd);
+    int (*streamin_state)(void *state_machine, int in_fd);
 
     /** 
-     * Optional method, can be NULL.  Optimization for state machines that 
-     * employ copy-on-write or another scheme whereby they 
-     * can snapshot themselves more cheaply than streaming a full image.
-     * 
-     * Callback to order the state machine to take a snapshot of current state, 
-     * store entry_id as the ID of our snapshot, and delete any previous snapshots.  
+     * Orders the state machine to take a snapshot of current state, persist it and delete any previous snapshot.  
      * We only maintain 1 snapshot per state machine. 
-     * 
-     * If this method is null, the framework will use streamout_snapshot
-     * and streamin_snapshot to manage snapshotting.
      */
-    int (*take_snapshot_cb)(void *state_machine, traft_entry_id entry_id);
+    int (*take_snapshot_cb)(void *state_machine); 
 
-    /**
-     * Optional, implement this if you implement take_snapshot_cb
-     * Callback to retrieve the ID of the last taken snapshot.
+    /** Stream out the last snapshot image we took. 
+     *  Note:  This will be called from a separate thread, it must be threadsafe.
      */
-    traft_entry_id (*get_last_snapshot_id_cb)(void *state_machine);
+    int (*streamout_snapshot)(void *state_machine, int out_fd);
 } traft_statemachine_ops;
 
 

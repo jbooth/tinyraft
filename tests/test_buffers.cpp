@@ -22,6 +22,7 @@
 #include <sys/uio.h>
 #include <string.h>
 #include "gtest/gtest.h"
+#include "wiretypes.h"
 #include "buffers.h"
 #include "buffers.c"
 
@@ -91,6 +92,13 @@ TEST (BuffersTest, Encoding) {
   int term_id = 1;
   int client_idx = 2;
   int entry_idx = 3;
+  traft_entry_id this_entry, prev_entry, quorum_entry;
+  this_entry.term_id = term_id;
+  this_entry.idx = entry_idx;
+  prev_entry.term_id = term_id;
+  prev_entry.idx = entry_idx - 1;
+  quorum_entry.term_id = term_id;
+  quorum_entry.idx = entry_idx - 1;
 
   // init buffers and send fwd_entries_req
   ASSERT_EQ(0, traft_buf_alloc(&b, allBuffsLen));
@@ -99,21 +107,14 @@ TEST (BuffersTest, Encoding) {
   // first, read fwd_entries_req from client
   forward_entries_req fwd_req;
   read_all(pipes[0], (uint8_t*) &fwd_req, RPC_REQ_LEN);
-  // set up append_entries_req as if we're leader
-  append_entries_req leader_header;
-  leader_header.this_term = term_id;
-  leader_header.prev_term = term_id;
-  leader_header.quorum_term = term_id;
-  leader_header.this_idx = entry_idx;
-  leader_header.prev_idx = entry_idx - 1;
-  leader_header.quorum_idx = entry_idx - 1;
   // leader transcode out to clients
-  ASSERT_EQ(0, traft_buf_transcode(&b, pipes[0], key, &fwd_req, &leader_header));
+  ASSERT_EQ(0, traft_buf_transcode(&b, pipes[0], key, &fwd_req, this_entry, prev_entry, quorum_entry));
 	write_all(tmp_fd, b.main_buffer, b.message_size);
 	fsync(tmp_fd);
 
   // read append_entries req from leader, follower-side
 	lseek(tmp_fd, 0, SEEK_SET);
+  append_entries_req leader_header;
 	ASSERT_EQ(0, traft_buf_decode(&b, &leader_header, tmp_fd, key));
   
   ASSERT_EQ(0, traft_buf_view_iovecs(&b, &vecs[0], 4));

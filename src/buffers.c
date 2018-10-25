@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <lz4.h>
 #include <sys/uio.h>
+#include "tinyraft.h"
 #include "wiretypes.h"
 #include "buffers.h"
 
@@ -161,8 +162,8 @@ int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, i
   return write_all(send_fd, b->main_buffer, b->message_size);
 }
 
-int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, 
-                        forward_entries_req *client_header, append_entries_req *leader_header) {
+int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, 
+                        traft_entry_id this_entry, traft_entry_id prev_entry, traft_entry_id quorum_entry) {
   printf("TRANSCODE \n\n");
   if (client_header->body_len > b->max_msg_size) {
     // TODO set errno
@@ -219,24 +220,33 @@ int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key,
   }
  
   printf("decrypted\n");
-  // Recrypt into main buffer with header, using log entry_idx as nonce
+  // Make append_entries_req header for persisted log entry
+  append_entries_req leader_header;
+  leader_header.this_term = this_entry.term_id;
+  leader_header.this_idx = this_entry.idx;
+  leader_header.prev_term = prev_entry.term_id;
+  leader_header.prev_idx = prev_entry.idx;
+  leader_header.quorum_term = quorum_entry.term_id;
+  leader_header.quorum_idx = quorum_entry.idx;
+
+  // Use index into current term as nonce
   nonceval leader_nonce;
-  nonceForI32(leader_header->this_idx, &leader_nonce);
-  leader_header->body_len = client_header->body_len;
+  nonceForI32(leader_header.this_idx, &leader_nonce);
+  leader_header.body_len = client_header->body_len;
   b->message_size += RPC_REQ_LEN;
 
   uint8_t *body_section = b->main_buffer + RPC_REQ_LEN;
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-			body_section, leader_header->auth_tag, NULL, b->help_buffer, leader_header->body_len, 
-			(unsigned char*) leader_header, append_entries_AD_len, NULL, leader_nonce, key) == -1) {
+			body_section, leader_header.auth_tag, NULL, b->help_buffer, leader_header.body_len, 
+			(unsigned char*) &leader_header, append_entries_AD_len, NULL, leader_nonce, key) == -1) {
 		return -1;
 	}
   memset(b->main_buffer, 0, RPC_REQ_LEN);
-  memcpy(b->main_buffer, leader_header, RPC_REQ_LEN);
+  memcpy(b->main_buffer, &leader_header, RPC_REQ_LEN);
   printf("recrypted\n");
   sodium_bin2hex(message_hex, 512, b->main_buffer, b->message_size);
   printf("buffer contents after recrypt: %s\n", message_hex);
-  sodium_bin2hex(message_hex, 512, leader_header->auth_tag, 16);
+  sodium_bin2hex(message_hex, 512, leader_header.auth_tag, 16);
   printf("encrypted with MAC %s\n", message_hex);
   sodium_bin2hex(message_hex, 512, leader_nonce, 12);
   return 0;

@@ -130,9 +130,4 @@ int traft_log_create(traft_log_term_log *log, const char *basedir, uint64_t term
   return fdatasync(log->entries_fd);
 }
 
-// We manage 2 log_parts:  current and previous
-// When current fills up, we delete previous and create a new one
-typedef struct log_store {
-  traft_log_term_log*    previous;
-  traft_log_term_log*    current;
-} log_store;
+

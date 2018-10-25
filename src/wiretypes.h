@@ -25,9 +25,19 @@ extern "C" {
 #include <stdint.h>
 #include <uuid/uuid.h>
 
-// Request headers are all 64 bytes, responses are all 32 bytes.
+// 
+// Shared types
+// 
+
+// Unique ID for a log entry
+typedef struct traft_entry_id {
+  uint64_t  term_id;
+  uint32_t  idx;
+} traft_entry_id;
+
+
+// Request types 
 #define RPC_REQ_LEN 64 
-#define RPC_RESP_LEN 32
 
 /** Request sent to the leader to add entries to the cluster */
 typedef struct forward_entries_req {
@@ -119,6 +129,8 @@ typedef struct generic_req {
   } message;
   req_info  info;         // 64
 } generic_req;
+
+#define RPC_RESP_LEN 32
 
 typedef struct append_entries_resp {
   uint64_t committed_term;    // 8     // Last term this follower's committed
