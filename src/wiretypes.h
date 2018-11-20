@@ -29,12 +29,6 @@ extern "C" {
 // Shared types
 // 
 
-// Unique ID for a log entry
-typedef struct traft_entry_id {
-  uint64_t  term_id;
-  uint32_t  idx;
-} traft_entry_id;
-
 
 // Request types 
 #define RPC_REQ_LEN 64 
@@ -44,8 +38,8 @@ typedef struct forward_entries_req {
   uint64_t  term_id;        // 8  Term we're trying to append to
   uint32_t  client_idx;     // 12 Monotonically increasing per-client value, resets on new term
   uint32_t  body_len;       // 16 
-  uint8_t   auth_tag[12];   // 28 Hardcoded length for auth tag, it's an IETF standard.
-  uint8_t   padding[36];    // 64
+  uint8_t   auth_tag[16];   // 32 Poly1305 MAC
+  uint8_t   padding[32];    // 64
 } forward_entries_req;
 
 // Length, from front of struct, of section used as 'additional data' for MAC
@@ -57,17 +51,24 @@ typedef struct forward_entries_req {
   * If the values for 'this' are all 0, this is a heartbeat request.
   */
 typedef struct append_entries_req {
-  uint64_t  this_term;      // 8
-  uint64_t  prev_term;      // 16
-  uint64_t  quorum_term;    // 24
-  uint32_t  this_idx;       // 28
-  uint32_t  prev_idx;       // 32
-  uint32_t  quorum_idx;     // 36
-  uint32_t  body_len;       // 40
-  uint8_t   auth_tag[16];   // 56
-  uint8_t   padding[8];     // 64
+  uint64_t  this_term;      // 8 , term of this entry
+  uint64_t  prev_term;      // 16, term of prev entry
+  uint64_t  quorum_term;    // 24, term of max quorum commit
+  uint32_t  this_idx;       // 28, termlog idx of this entry
+  uint32_t  prev_idx;       // 32, termlog idx of prev entry
+  uint32_t  quorum_idx;     // 36, termlog idx of max quorum commit
+  uint32_t  body_len;       // 40, length of body behind this header
+  uint32_t  orig_cli_idx;   // 44, unique index from originating client
+  uint16_t  cli_short_id;   // 46, short_id of the originating client
+  uint8_t   message_type;   // 47, normal, heartbeat, new term
+  uint8_t   padding;        // 48
+  uint8_t   auth_tag[16];   // 64, Poly1305 MAC
 } append_entries_req;
 
+// AE message types
+#define TRAFT_AE_NORMAL     0
+#define TRAFT_AE_HEARTBEAT  1
+#define TRAFT_AE_TERMCHANGE 2
 // Length, from front of struct, of section used as 'additional data' for MAC
 #define append_entries_AD_len 40
 

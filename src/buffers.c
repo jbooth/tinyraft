@@ -10,7 +10,7 @@
 #include "wiretypes.h"
 #include "buffers.h"
 
-int traft_buf_alloc(traft_buffers *b, size_t max_msg_size) {
+int traft_buff_alloc(traft_buff *b, size_t max_msg_size) {
   if (SODIUM_LIBRARY_VERSION_MAJOR < 10 || sodium_init() == -1) {
     return -1;
   }
@@ -18,13 +18,8 @@ int traft_buf_alloc(traft_buffers *b, size_t max_msg_size) {
   // Buffer size is worst-case compressed size + AEAD tag bytes
   b->buff_size = (size_t)LZ4_compressBound((int)max_msg_size) 
                         + RPC_REQ_LEN;
-  b->main_buffer = (uint8_t*) sodium_malloc(b->buff_size);
-  if (b->main_buffer == NULL) { return -1; }
-  b->help_buffer = (uint8_t*) sodium_malloc(b->buff_size);
-  if (b->help_buffer == NULL) {
-    sodium_free(b->main_buffer);
-    return -1;
-  }
+  b->buff = (uint8_t*) sodium_malloc(b->buff_size);
+  if (b->buff == NULL) { return -1; }
   return 0;
 }
 
@@ -39,32 +34,6 @@ typedef unsigned char nonceval[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
 static inline void nonceForI32(uint32_t i, nonceval *nonce) {
   memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
   memcpy(nonce, &i, 4);
-}
-
-// Writes all.  Returns 0 on success, -1 on failure.
-static int write_all(int fd, uint8_t *buf, size_t count) {
-  while (count) {
-    ssize_t w = write(fd, buf, count);
-    if (w == -1) {
-      return -1;
-    }
-    count -= w;
-    buf += w;
-  }
-  return 0;
-}
-
-// Reads all.  Returns 0 on success, -1 on failure.
-static int read_all(int fd, uint8_t *buf, size_t count) {
-  while (count) {
-    ssize_t r = read(fd, buf, count);
-    if (r == -1) {
-      return -1;
-    }
-    count -= r;
-    buf += r;
-  }
-  return 0;
 }
 
 static int import_iovecs(traft_buffers *b, struct iovec *args, int32_t num_args) {
@@ -159,7 +128,7 @@ int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, i
   printf("header->body_len %d\n", header->body_len);
   // end remove 
 
-  return write_all(send_fd, b->main_buffer, b->message_size);
+  return traft_write_all(send_fd, b->main_buffer, b->message_size);
 }
 
 int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, 
@@ -170,7 +139,7 @@ int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, forwa
     return -1;
   }
   // Read into main buffer
-  if (read_all(recv_fd, b->main_buffer, client_header->body_len) == -1) { 
+  if (traft_read_all(recv_fd, b->main_buffer, client_header->body_len) == -1) { 
     printf("read error: %s \n", strerror(errno));
     return -1;
   }

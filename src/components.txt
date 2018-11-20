@@ -1,0 +1,48 @@
+
+SERVER
+initiates or applies entries it's receiving
+  ON INITIATE NEW TERM
+  write term-finished entry (?)
+  wait for quorum on all entries in last term
+  create new termlog with config, copy old to prev_termlog
+  wait snapshot done
+  wait quorum on idx 1 (config entry)
+  return to client
+
+  ON RECEIVE NEW TERM
+  if prev term not finished, reject
+  create new termlog with config, copy old to prev_termlog
+  wait for snapshot
+  return to leader
+
+
+  
+
+STATE APPLICATOR
+depends on storage
+applies entries, snapshots when starting new term
+  ON TERM START
+  calls function that applies entries until term end
+  no entry applied until quorum apply it
+
+  ON TERM END
+  calls snapshot
+  marks storage->last_snapshot_taken
+  block storage->new_term
+  start new term
+
+
+REPLICATOR
+main thread reads all responses, updates state
+replicator threads have a max term, they'll replicate entries from older terms but not from newer 
+
+  ON TERM START
+  start all replicators with max term
+  replicators call storage->send_entries, block on storage->more_entries
+  main thread reads all responses, updates state, checks for term_end
+
+  ON TERM END
+  replicators realize term has ended, terminate gracefully
+  main thread continues reading responses and blocking until all threads down
+  main thread signals quorum reached for last entry, block storage->new_term
+  start new term

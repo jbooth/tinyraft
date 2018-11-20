@@ -16,16 +16,27 @@
    Author Jay Booth
 */
 
-#include <pthread.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sodium.h>
-#include "tinyraft.h"
-#include "storage.h"
-#include "rpc.h"
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+// Unique ID for a log entry
+typedef struct traft_entry_id {
+    uint64_t  term_id;
+    uint32_t  idx;
+} traft_entry_id;
+
+typedef struct traft_peer_state {
+	pthread_mutex_t guard;
+  pthread_cond_t  on_change;
+  traft_entry_id  local_committed_idx;
+  traft_entry_id  quorum_idx;
+} traft_peer_state;
+
+
+#ifdef __cplusplus
+}
+#endif

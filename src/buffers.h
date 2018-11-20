@@ -14,20 +14,41 @@ extern "C" {
 
 /**
  * Buffer utility struct to manage compression/encryption of messages in flight.
+ * Used in conjunction with either append_entries_req or forward_entries_req.
  */
-typedef struct traft_buffers {
-  uint8_t *main_buffer;
-  uint8_t *help_buffer;
-  size_t  max_msg_size;
-  size_t  buff_size;
-  size_t  message_size;
-} traft_buffers;
+typedef struct traft_buff {
+  uint8_t *buff;
+  size_t  message_size; // current message size
+  size_t  max_msg_size; // max message size that this buffer can hold
+  size_t  buff_size;    // size that was allocated (max_msg_size + overhead)
+} traft_buff;
 
-/** Allocates traft_buffers using sodium_malloc */
-int traft_buf_alloc(traft_buffers *b, size_t max_msg_size);
+/** Allocates traft_buffers with proper overhead sizing */
+int traft_buff_alloc(traft_buff *b, size_t max_msg_size);
 
 /** Frees associated traft_buffers */
-void traft_buf_free(traft_buffers *b);
+void traft_buff_free(traft_buff *b);
+
+
+typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
+typedef traft_termconfig struct {
+  traft_cluster_config  cluster_cfg;  // 4680
+  traft_termkey         termkey;      // +32 = 4712
+  traft_pub_key         leader_id;    // +32 = 4744
+  uint64_t              term_id;      // +8  = 4752
+} traft_termconfig;
+
+/** Reads exactly RPC_REQ_LEN (64) bytes into header */
+int traft_buff_readheader(uint8_t *header, int readfd);
+
+/** Reads message body of provided length into our buffer */
+int traft_buff_readbody(traft_buff *buff, int readfd, size_t len);
+
+/** Writes RPC_REQ_LEN (64) bytes from header and then the provided buffer */
+int traft_buff_writemsg(append_entries_req *header, traft_buff *buff, int writefd);
+
+/** Writes buffer contents to specified fd */
+int traft_buff_wrtebuff(traft_buff *buff, int writefd);
 
 
 /**
@@ -39,8 +60,8 @@ void traft_buf_free(traft_buffers *b);
  *    -- If the leader has moved on to a new term, this request will be rejected and we'll need to retry.
  *  Also note that we don't read any response in this function, it's a fire-and-forget.
  */
-int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, int32_t client_idx, 
-                    unsigned char *key, struct iovec *args_in, int32_t num_args);
+int traft_buff_encode_client(traft_buff *b, int send_fd, uint64_t term_id, int32_t client_idx, 
+                    unsigned char *key, uint8_t *entry_data, int32_t entry_len);
 
 /**
  *  Leader function.  Transcodes a partially received message into the final log format that will be replicated.
@@ -50,23 +71,24 @@ int traft_buf_encode_and_send(traft_buffers *b, int send_fd, uint64_t term_id, i
  *  in order to sign our new header and attest to its accuracy.
  * 
  *  After this method completes, an append_entries_req header along with the body will be in b->main_buffer.
- *  Doesn't write to log storage.  See storage.c for that.
  */
-int traft_buf_transcode(traft_buffers *b, int recv_fd, unsigned char *key, forward_entries_req *client_header, 
-                        traft_entry_id this_entry, traft_entry_id prev_entry, traft_entry_id quorum_entry);
+// TODO change to include prevTermKey and thisTermKey
+// TODO supply header objs instead of entry IDs
+int traft_buff_transcode_leader(traft_buf *b, int recv_fd, 
+                                uint8_t *messageTermKey, uint8_t *leaderTermKEy
+                                forward_entries_req *client_header, append_entries_req *leader_header);
 
+/** Verifies message integrity via auth tag in header */
+int traft_buff_verify_follower(traft_buf *b, append_entries_req *header);
 /**
- *  State machine function.  Used to read and decode an entry from the persisted log.  
- *  We store the header in *header, and the body in b->main_buffer.
- *  After this function completes, view_iovecs will work.
+ *  State machine function.  Decrypts, authenticates and decompresses an encoded message.
+ *  After completion, we'll have stored the header in *header, and the body in b->main_buff.
  *  Note that we take no argument for file position.  It's the caller's responsibility to call lseek() before calling this function.
  */
-int traft_buf_decode(traft_buffers *b, append_entries_req *header, int read_fd, unsigned char *key);
+int traft_buff_decode(traft_buff *b_main, traft_buff *b_help, append_entries_req *header, int read_fd, unsigned char *key);
 
-/** 
- * Copies a view of our decoded iovecs to the provided args
- */
-int traft_buf_view_iovecs(traft_buffers *b, struct iovec *args, int32_t max_args);
+/** Decodes term config from a message body */
+int traft_deser_termconfig(const uint8_t *buff, traft_term_config *cfg);
 
 #ifdef __cplusplus
 }

@@ -27,8 +27,14 @@ extern "C" {
 #include <sys/uio.h>
 #include <sys/socket.h>
 #include <uuid/uuid.h>
+#include <sodium.h>
 
 /** Uniquely identifies an entry in the replicated log. */
+typedef struct traft_entry_id {
+  uint64_t  term_id;
+  uint32_t  idx;
+} traft_entry_id;
+
 
 /**
  * State machines do three things:
@@ -84,50 +90,71 @@ int traft_stop_server(traft_server *server);
 /** Blocks until a server has actually shut down and released all resources. */
 int traft_join_server(traft_server *server);
 
-typedef struct raftlet {
+typedef uint8_t traft_pub_key[32]; // crypto_box_curve25519xchacha20poly1305_PUBLICKEYBYTES
+typedef uint8_t traft_secret_key[32]; // crypto_box_curve25519xchacha20poly1305_SECRETKEYBYTES
+
+#define TRAFT_MAX_PEERS 16
+/** Cluster-wide configuration values. */
+typedef struct traft_cluster_config {
+  // Leader will try to send a heartbeat at least this often.
+  int64_t     heartbeat_interval_ms; // 8
+
+  // Followers will call for a new election if leader doesn't contact at least this often.
+  int64_t     election_timeout_ms;  // 16
+
+  // The oldest we'll allow a snapshot to be before taking a new one and starting a new term.
+  int64_t     max_snapshot_age_sec; // 24
+
+  // The following values operate independently in that we'll try to discard old terms from disk if any are exceeded.
+  // However, we will always maintain at least 2 terms on disk.  
+  int64_t     max_retained_age_sec;  // 32, Will try to discard any terms who's last entry is older than this.
+  int64_t     max_retained_bytes;    // 40, Will try to evict terms until we're below this total threshold.
+
+	// Cluster membership: IDs and hostname/ports
+	uint16_t							ports[TRAFT_MAX_PEERS];						// + 2  * 16 = 72
+	traft_pub_key				 	peer_ids[TRAFT_MAX_PEERS];				// + 32 * 16 = 584
+	char									hostnames[TRAFT_MAX_PEERS][256];	// + 4096 = 4680
+} traft_raftlet_config;
+#define TRAFT_CLUSTER_CONFIG_SIZE 4680
+
+typedef struct traft_raftlet_identity {
+	traft_pub_key			raftlet_id; // 32
+	traft_secret_key	secret_key;	// 64
+} traft_raftlet_identity;
+
+#define TRAFT_PEER_INFO_SIZE 296
+
+typedef struct traft_cluster_membership {
+} traft_cluster_config;
+#define TRAFT_CLUSTER_CONFIG_SIZE 4640
+
+#define TRAFT_DEFAULT_PORT 1103
+/**
+ * Generates keys and default raftlet_config values for peer_count peers, storing them in *cfg.
+ * cfg must point to a memory region at least peer_count * TRAFT_CLUSTER_CONFIG_SIZE in length.
+ * If hostnames is non-null and points to a list of strings of length peer_count, we will use those hostnames.  Otherwise localhost.
+ * If ports is non-null, we will use those ports.  Otherwise TRAFT_DEFAULT_PORT.
+ */
+void gen_cluster(traft_cluster_config *cfg, int peer_count, char *hostnames, uint16_t *ports);
+
+typedef struct traft_raftlet {
   uuid_t                      cluster_id;
   traft_statemachine_ops   ops;
   void                        *state_machine;
   void                        *server_state;
-} raftlet;
+} traft_raftlet;
 
-/** Configuration for a raftlet. */
-typedef struct raftlet_config {
-  // Leader will try to send a heartbeat at least this often.
-  int64_t     heartbeat_interval_ms;
 
-  // Followers will call for a new election if leader doesn't contact at least this often.
-  int64_t     election_timeout_ms;
-
-  // The following values govern the length of a term.  We'll start a new term if any are exceeded.
-  int64_t     max_term_age_sec; // The time elapsed since the first entry was written
-  int64_t     max_term_bytes;   // Size of all entries + 64 bytes per entry
-  int64_t     max_term_entries; // Max entries in a term
-
-  // The following values operate independently in that we'll try to discard old terms from disk if any are exceeded.
-  // However, we will always maintain at least 2 terms on disk.  
-  int64_t     max_retained_age_sec;  // Will try to discard any terms who's last entry is older than this.
-  int64_t     max_retained_bytes;    // Will try to evict terms until we're below this total threshold.
-  int64_t     max_retained_terms;    // Max number of terms to retain before we try to evict old ones
-  int64_t     max_retained_entries;  // Max entries before we try to evict old terms
-} raftlet_config;
-
-/** Represents a member of the cluster. */
-typedef struct traft_peer {
-  uuid_t peer_id;
-  struct sockaddr addr;
-  socklen_t addrlen;
-} traft_peer;
 
 #define TINYRAFT_MAX_PEERS 15
 
 /**
-  * Inits a storage directory on disk for a raftlet.  Configuration and membership are stored at init time,
+  * Inits a storage directory on disk for a traft_raftlet.  Configuration and membership are stored at init time,
   * because they can change over the lifetime of a cluster.
   * 
   * The configuration information will be considered entry 0 of term 0.  All real terms are >0.
   */
-int traft_init_raftlet_storage(const char* storagepath, raftlet_config *config, traft_peer *membership, uint8_t peer_count);
+int traft_init_raftlet_storage(const char* storagepath, traft_raftlet_config *config, traft_peer *membership, uint8_t peer_count);
 
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
@@ -135,17 +162,17 @@ int traft_init_raftlet_storage(const char* storagepath, raftlet_config *config, 
   * 
   * 
   */
-int traft_run_raftlet(const char *storagepath, traft_server *server, traft_statemachine_ops ops, void *state_machine, raftlet *raftlet);
+int traft_run_raftlet(const char *storagepath, traft_server *server, traft_statemachine_ops ops, void *state_machine, traft_raftlet *raftlet);
 
 /**
   * Requests that a server stop running.  It will clean up all resources associated before threads terminate.
   */
-int traft_stop_raftlet(raftlet *raftlet);
+int traft_stop_raftlet(traft_raftlet *raftlet);
 
 /**
   * Block until a raftlet has stopped running.
   */
-int traft_join_raftlet(raftlet *raftlet);
+int traft_join_raftlet(traft_raftlet *raftlet);
 
 
 
