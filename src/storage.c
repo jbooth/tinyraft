@@ -26,6 +26,4 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sodium.h>
-#include "tinyraft.h"
 #include "storage.h"
-#include "rpc.h"

@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include "tinyraft.h"
-#include "rpc.h"
 #include "storage.h"
 
 #ifdef __cplusplus

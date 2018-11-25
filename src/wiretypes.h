@@ -25,52 +25,63 @@ extern "C" {
 #include <stdint.h>
 #include <uuid/uuid.h>
 
-// 
-// Shared types
-// 
-
-
 // Request types 
+#define TRAFT_REQTYPE_NEWENTRY    1
+#define TRAFT_REQTYPE_APPENDENTRY 2
+#define TRAFT_REQTYPE_REQVOTE     3
+
+/** Common to all requests, always the last 24 bytes */
+typedef struct traft_reqinfo {
+  uint32_t  body_len;     // 4
+  uint8_t   req_type;     // 5
+  uint8_t   padding[3];   // 8
+  uint8_t   auth_tag[16]; // 24
+} traft_reqinfo;
+
+typedef struct traft_req {
+  uint8_t       padding[40];  // 40 type-specific data
+  traft_reqinfo info;         // 64
+} traft_req;
 #define RPC_REQ_LEN 64 
 
 /** Request sent to the leader to add entries to the cluster */
-typedef struct forward_entries_req {
-  uint64_t  term_id;        // 8  Term we're trying to append to
+typedef struct traft_newentry_req {
+  uint64_t  term_id;        // 8  Term we're trying to append to, identifies our key
   uint32_t  client_idx;     // 12 Monotonically increasing per-client value, resets on new term
   uint32_t  body_len;       // 16 
-  uint8_t   auth_tag[16];   // 32 Poly1305 MAC
-  uint8_t   padding[32];    // 64
-} forward_entries_req;
+  uint16_t  client_id;      // 18 Client short ID
+  uint8_t   padding[29];    // 47
+  uint8_t   message_type;   // forward_entries
+  uint8_t   auth_tag[16];   // 64 Poly1305 MAC
+} traft_newentry_req;
 
 // Length, from front of struct, of section used as 'additional data' for MAC
-#define forward_entries_AD_len 16
+#define forward_entries_AD_len 48
 
 /** 
   * Request sent by the leader to replicate entries to the cluster.
   * Contains term and index for this entry, prev entry, and quorum entry.
   * If the values for 'this' are all 0, this is a heartbeat request.
   */
-typedef struct append_entries_req {
+typedef struct traft_appendentry_req {
   uint64_t  this_term;      // 8 , term of this entry
   uint64_t  prev_term;      // 16, term of prev entry
   uint64_t  quorum_term;    // 24, term of max quorum commit
   uint32_t  this_idx;       // 28, termlog idx of this entry
   uint32_t  prev_idx;       // 32, termlog idx of prev entry
   uint32_t  quorum_idx;     // 36, termlog idx of max quorum commit
+  uint8_t   padding[4];     // 40
   uint32_t  body_len;       // 40, length of body behind this header
-  uint32_t  orig_cli_idx;   // 44, unique index from originating client
-  uint16_t  cli_short_id;   // 46, short_id of the originating client
-  uint8_t   message_type;   // 47, normal, heartbeat, new term
-  uint8_t   padding;        // 48
+  uint8_t   message_type;   // 41, append_entries
   uint8_t   auth_tag[16];   // 64, Poly1305 MAC
-} append_entries_req;
+} traft_appendentry_req;
 
 // AE message types
 #define TRAFT_AE_NORMAL     0
 #define TRAFT_AE_HEARTBEAT  1
 #define TRAFT_AE_TERMCHANGE 2
 // Length, from front of struct, of section used as 'additional data' for MAC
-#define append_entries_AD_len 40
+#define append_entries_AD_len 48
 
 
 typedef struct init_cluster_req {
@@ -104,32 +115,6 @@ typedef struct would_vote_req {
   uint32_t      last_log_idx; // 52
   uint32_t      padding;      // 56
 } would_vote_req;
-
-#define OPCODE_append_entries     1
-#define OPCODE_replicate_entries  2
-#define OPCODE_init_cluster       3
-#define OPCODE_add_server         4
-#define OPCODE_vote_req           5
-
-/** Shared request info, always the last 8 of the 64 request header bytes */
-typedef struct req_info {
-  uint8_t  opcode;      // 5
-  uint8_t  sys_msg;     // 6
-  uint8_t  padding[2];  // 8
-} req_info;
-
-/** Generic request header type, cast to this to call functions below */
-typedef struct generic_req {
-  union {
-    forward_entries_req forward_entries;
-    append_entries_req append_entries;
-    init_cluster_req init_cluster;
-    add_server_req add_server;
-    would_vote_req would_vote;
-    request_vote_req request_vote;
-  } message;
-  req_info  info;         // 64
-} generic_req;
 
 #define RPC_RESP_LEN 32
 

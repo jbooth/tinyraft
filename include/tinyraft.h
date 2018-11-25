@@ -35,7 +35,6 @@ typedef struct traft_entry_id {
   uint32_t  idx;
 } traft_entry_id;
 
-
 /**
  * State machines do three things:
  * 1)  Have committed log entries applied to them to update their state.
@@ -45,22 +44,25 @@ typedef struct traft_entry_id {
  * The user will likely want to interact with it in some other way, providing
  * read methods that access state, etc.  
  * 
- * All apply_log and snapshot creating commands are invoked 
- * by a single thread in a guaranteed order.  
- * Streaming out a snapshot is done by a different thread.
+ * All apply_log and snapshot creation and snapshot installation commands 
+ * are invoked by a single thread in a guaranteed order.  
+ * Streaming out a previously taken snapshot is done by a different thread.
  */
 typedef struct traft_statemachine_ops {
     /** Callback to apply a log entry to our state machine */
-    int(*apply_log_cb)(void *state_machine, struct iovec *entry, int num_args);
-
-    /** Delete all local state and stream in a snapshot.  */
-    int (*streamin_state)(void *state_machine, int in_fd);
+    int(*apply_log)(void *state_machine, const char *entry);
 
     /** 
      * Orders the state machine to take a snapshot of current state, persist it and delete any previous snapshot.  
      * We only maintain 1 snapshot per state machine. 
      */
-    int (*take_snapshot_cb)(void *state_machine); 
+    int (*take_snapshot)(void *state_machine);  
+
+    /** Revert to previously taken snapshot */
+    int (*revert_snapshot)(void *state_machine);
+
+    /** Delete all local state and stream in a snapshot.  */
+    int (*streamin_snapshot)(void *state_machine, int in_fd);
 
     /** Stream out the last snapshot image we took. 
      *  Note:  This will be called from a separate thread, it must be threadsafe.
@@ -147,14 +149,6 @@ typedef struct traft_raftlet {
 
 
 #define TINYRAFT_MAX_PEERS 15
-
-/**
-  * Inits a storage directory on disk for a traft_raftlet.  Configuration and membership are stored at init time,
-  * because they can change over the lifetime of a cluster.
-  * 
-  * The configuration information will be considered entry 0 of term 0.  All real terms are >0.
-  */
-int traft_init_raftlet_storage(const char* storagepath, traft_raftlet_config *config, traft_peer *membership, uint8_t peer_count);
 
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided server.  

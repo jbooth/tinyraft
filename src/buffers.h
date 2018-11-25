@@ -30,17 +30,11 @@ int traft_buff_alloc(traft_buff *b, size_t max_msg_size);
 void traft_buff_free(traft_buff *b);
 
 
-/** Reads exactly RPC_REQ_LEN (64) bytes into header */
-int traft_buff_readheader(uint8_t *header, int readfd);
-
-/** Reads message body of provided length into our buffer */
-int traft_buff_readbuff(traft_buff *buff, int readfd, size_t len);
-
-/** Writes RPC_REQ_LEN (64) bytes from header and then the provided buffer */
-int traft_buff_writemsg(append_entries_req *header, traft_buff *body, int writefd);
+/** Reads header of RPC_REQ_LEN and, for requests with bodies, body of variable length into our buffer */
+int traft_buff_readreq(traft_buff *buff, int readfd, size_t len);
 
 /** Writes buffer contents to specified fd.  */
-int traft_buff_writebuff(traft_buff *buff, int writefd);
+int traft_buff_writemsg(traft_buff *buff, int writefd);
 
 
 /**
@@ -57,37 +51,35 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
                     unsigned char *key, uint8_t *entry_data, int32_t entry_len);
 
 /**
- *  Leader function.  Transcodes a partially received message into the final log format that will be replicated.
- *  We want to replace the forward_entries_req header with an append_entries_req containing a definitive index for this entry in this term.
- *  We also take the opportunity to reencrypt using that entry index as the nonce, since we have to recrypt anyways
- *  in order to sign our new header and attest to its accuracy.
- *
- *  After this method completes, the newly recoded message body will be in our
- *  buffer, matching the body_len and auth tag set in leader_header.
+ *  Leader function.  Transcodes a received newentry request into the appendentry request that we'll persist.
+ *  Expects newentry header and body in buffer, transcodes to appendentry header and body.
  */
-int traft_buff_transcode_leader(traft_buf *b, uint8_t *messageTermKey, uint8_t *leaderTermKey
-                                forward_entries_req *client_header, append_entries_req *leader_header);
+int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t *leader_termkey,
+                                traft_entry_id this_entry, traft_entry_id prev_entry, traft_entry_id quorum_entry);
 
-/** Verifies message integrity via auth tag in header */
-int traft_buff_verify_follower(traft_buf *b, append_entries_req *header);
+/** Verifies and appendentries request via auth tag in header */
+int traft_buff_verify_follower(traft_buff *b);
+
+/** Returns this buffer's first 64 bytes as an appendentries_req */
+traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
+
 /**
  *  State machine function.  Decrypts, authenticates and decompresses an encoded message.
- *  After completion, we'll have stored the header in *header, and the body in b->main_buff.
- *  Note that we take no argument for file position.  It's the caller's responsibility to call lseek() before calling this function.
- */
-int traft_buff_decode(traft_buff *b_main, traft_buff *b_help, append_entries_req *header, int read_fd, unsigned char *key);
+ *  After completion, we'll have stored the decoded and decompressed body in out_buff.
+\*/
+int traft_buff_decode(traft_buff *b, traft_buff *out_buff,  unsigned char *termkey);
 
-/** Decodes term config from a message body */
-int traft_deser_termconfig(const uint8_t *buff, traft_term_config *cfg);
 
 typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
-typedef traft_termconfig struct {
+typedef struct traft_termconfig {
   traft_cluster_config  cluster_cfg;  // 4680
   traft_termkey         termkey;      // +32 = 4712
   traft_pub_key         leader_id;    // +32 = 4744
   uint64_t              term_id;      // +8  = 4752
 } traft_termconfig;
 
+/** Decodes term config from a message body */
+int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg);
 
 #ifdef __cplusplus
 }

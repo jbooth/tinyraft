@@ -21,7 +21,9 @@
 #include <stdint.h>
 #include "tinyraft.h"
 #include "wiretypes.h"
+#include "termlog.h"
 #include "buffers.h"
+#include "rwlock.h"
 
 typedef struct traft_peerstate {
   uint64_t  committed_term;
@@ -36,11 +38,11 @@ typedef struct traft_storage {
   traft_peerstate peerstate;
 
   // Guards changeover between terms.  Normal operation acquires readlock, term change acquires writelock.
-  pthread_rwlock_t termchange_lock;
+  traft_rwlock_t termlock;
   traft_termlog current_term;
   traft_termlog prev_term;
   char          storage_path[4096]; 
-} traft_logstore;
+} traft_storage;
 
 int traft_storage_open(traft_storage *storage, const char *path);
 
@@ -48,10 +50,10 @@ int traft_storage_close(traft_storage *storage);
 
 
 /** Replicate a new entry from the leader, changing terms if necessary. */
-int traft_storage_write_entry(traft_storage *storage, append_entries_req *header, int client_fd, traft_buff *work_buff);
+int traft_storage_write_entry(traft_storage *storage, traft_appendentry_req *header, int client_fd, traft_buff *work_buff);
 
 /** Create a new entry as the leader in the current term. */
-int traft_storage_new_entry(traft_storage *storage, forward_entries_req *header, int client_fd, traft_buff *work_buff);
+int traft_storage_new_entry(traft_storage *storage, traft_newentry_req *header, int client_fd, traft_buff *work_buff);
 
 /** Starts a new term with the new provided config. */
 int traft_config_change(traft_storage *storage);
@@ -67,19 +69,10 @@ int traft_storage_wait_more_local(traft_storage *storage, traft_entry_id prev_ma
 int traft_storage_wait_more_quorum(traft_storage *storage, traft_entry_id prev_quorum, 
                                    traft_entry_id *new_quorum, int max_wait_ms);
 
-/** Invokes sendfile to write all entries in the provided range. */
-int traft_storage_send_entries(traft_storage *storage, traft_entry_id start, traft_entry_id end, int sock_fd);
+int traft_storage_send_entries(traft_storage *storage, int follower_fd, 
+                               traft_entry_id first_entry, traft_entry_id last_entry);
 
-/**
- * Reads an entry, including 64 byte append_entries_req header, into the provided buff.
- */
-int traft_storage_read_entry(traft_storage *storage, traft_entry_id entry_id, traft_buff *buff);
 
-// We retain at most 16 pairs of log files.  It may be fewer depending on the user's requested 
-// max_retention_time and max_retention_mb.
-#define MAX_LOGS_RETAINED 16
-typedef struct log_set {
-  traft_log_term_log logs[MAX_LOGS_RETAINED];
-  pthread_rwlock_t membership_lock;
-} log_set;
+int traft_storage_apply_entries(traft_termlog *log, traft_entry_id first_entry, traft_entry_id last_entry,
+                                  void *state_machine, traft_statemachine_ops ops);
 

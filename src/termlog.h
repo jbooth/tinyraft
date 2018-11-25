@@ -22,7 +22,7 @@
 #include "tinyraft.h"
 #include "wiretypes.h"
 #include "buffers.h"
-#include "rpc.h"
+#include "rwlock.h"
 
 // Log header, contains term-wide information.
 typedef struct traft_log_header {
@@ -48,7 +48,7 @@ typedef struct traft_log_entry_md {
  *    Data section containing actual entries in line with their AppendEntriesRequest headers.
  */
 typedef struct traft_termlog {
-  traft_rwlock_t      *lock
+  traft_rwlock_t      lock;
   traft_log_header    *header;
   traft_log_entry_md  *entries; 
   size_t map_len; // mmap is shared between header and entries; starts at header and is map_len long
@@ -66,16 +66,9 @@ int traft_termlog_open(traft_termlog *log, const char *basedir, uint64_t term_id
 int traft_termlog_create(traft_termlog *log, const char *basedir, uint64_t term_id, uint32_t num_entries);
 
 /**
- * Authenticate the message and then write the given entry with header included.
- * Req_info portion of append_entries_request can/should be zeroed, we don't look at it.
+ * Writes the provided 
  */
-int traft_termlog_append_entry(traft_termlog *log, append_entries_req *leader_req, int client_fd, traft_buff *work_buff);
-
-/**
- * Creates a new entry as leader to be replicated.
- */
-int traft_termlog_leader_new_entry(traft_termlog *log, forward_entries_req *client_req, int client_fd, traft_buff *work_buff);
-
+int traft_termlog_append_entry(traft_termlog *log, traft_buff *work_buff);
 
 /**
  * Populates *newest_idx with the newest_idx in this log, 
@@ -90,10 +83,10 @@ int traft_termlog_wait_more(traft_termlog *log, uint32_t last_idx, uint32_t *new
 /**
  * Uses sendfile to send a batch of entries.  Updates current_queue's state appropriately.
  */
-ssize_t traft_termlog_send_entries(int follower_fd, log_set* logs, send_queue *current_queue);
+int traft_termlog_send_entries(traft_termlog *log, int follower_fd, int32_t first_idx, int32_t last_idx);
 
 /**
- * Reads a single entry into the provided buffer.
- * Returns number of bytes read, or -1 on error.
+ * Applies the provided entry IDs to the provided state machine.
  */
-ssize_t traft_termlog_read_entry(traft_termlog *log, uint8_t *dest, uint32_t max_len, uint32_t entry_idx);
+int traft_termlog_apply_entries(traft_termlog *log, int32_t first_idx, int32_t last_idx,
+                                  void *state_machine, traft_statemachine_ops ops);
