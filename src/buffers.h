@@ -31,7 +31,7 @@ void traft_buff_free(traft_buff *b);
 
 
 /** Reads header of RPC_REQ_LEN and, for requests with bodies, body of variable length into our buffer */
-int traft_buff_readreq(traft_buff *buff, int readfd, size_t len);
+int traft_buff_readreq(traft_buff *buff, int readfd);
 
 /** Writes buffer contents to specified fd.  */
 int traft_buff_writemsg(traft_buff *buff, int writefd);
@@ -66,7 +66,7 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
 /**
  *  State machine function.  Decrypts, authenticates and decompresses an encoded message.
  *  After completion, we'll have stored the decoded and decompressed body in out_buff.
-\*/
+ */
 int traft_buff_decode(traft_buff *b, traft_buff *out_buff,  unsigned char *termkey);
 
 

@@ -116,7 +116,7 @@ typedef struct traft_cluster_config {
 	uint16_t							ports[TRAFT_MAX_PEERS];						// + 2  * 16 = 72
 	traft_pub_key				 	peer_ids[TRAFT_MAX_PEERS];				// + 32 * 16 = 584
 	char									hostnames[TRAFT_MAX_PEERS][256];	// + 4096 = 4680
-} traft_raftlet_config;
+} traft_cluster_config;
 #define TRAFT_CLUSTER_CONFIG_SIZE 4680
 
 typedef struct traft_raftlet_identity {
@@ -125,10 +125,6 @@ typedef struct traft_raftlet_identity {
 } traft_raftlet_identity;
 
 #define TRAFT_PEER_INFO_SIZE 296
-
-typedef struct traft_cluster_membership {
-} traft_cluster_config;
-#define TRAFT_CLUSTER_CONFIG_SIZE 4640
 
 #define TRAFT_DEFAULT_PORT 1103
 /**

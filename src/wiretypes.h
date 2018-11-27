@@ -38,6 +38,7 @@ typedef struct traft_reqinfo {
   uint8_t   auth_tag[16]; // 24
 } traft_reqinfo;
 
+/** Generic request with type and length */
 typedef struct traft_req {
   uint8_t       padding[40];  // 40 type-specific data
   traft_reqinfo info;         // 64

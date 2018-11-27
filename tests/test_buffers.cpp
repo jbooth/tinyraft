@@ -25,73 +25,27 @@
 #include "wiretypes.h"
 #include "buffers.h"
 #include "buffers.c"
-
-TEST (BuffersTest, ImportExport) { 
-  traft_buffers b;
-
-  int buflen = 16;
-  int allBuffsLen = 1024 * 1024;
-  uint8_t *bufs[4];
-  for (int i = 0 ; i < 4 ; i++) {
-    bufs[i] = (uint8_t*)malloc(buflen);
-    randombytes_buf(bufs[i], buflen);
-  }
-  iovec vecs[4];
-  for (int i = 0 ; i < 4 ; i++) {
-    vecs[i].iov_base = &bufs[i][0];
-    vecs[i].iov_len = buflen;
-  }
-
-  ASSERT_EQ(0, traft_buf_alloc(&b, allBuffsLen));
-
-  ASSERT_EQ(0, import_iovecs(&b, &vecs[0], 4));
-
-  ASSERT_EQ(20 + (4*16), b.message_size);
-
-  ASSERT_EQ(0, traft_buf_view_iovecs(&b, &vecs[0], 4));
-
-  for (int i = 0 ; i < 4 ; i++) {
-    ASSERT_EQ(0, memcmp(bufs[i], vecs[i].iov_base, buflen));
-  }
-
-  for (int i = 0 ; i < 4 ; i++) {
-    free(bufs[i]);
-  }
-  traft_buf_free(&b);
-}
   
 TEST (BuffersTest, Encoding) { 
-  ASSERT_EQ(64, sizeof(forward_entries_req));
-  ASSERT_EQ(64, sizeof(append_entries_req));
-  traft_buffers b;
+  ASSERT_EQ(64, sizeof(traft_appendentry_req));
+  ASSERT_EQ(64, sizeof(traft_newentry_req));
+  traft_buff b;
 
-  int buflen = 16;
-  int allBuffsLen = 1024 * 1024;
-  uint8_t *bufs[4];
-  for (int i = 0 ; i < 4 ; i++) {
-    bufs[i] = (uint8_t*)malloc(buflen);
-    randombytes_buf(bufs[i], buflen);
-  }
-  iovec vecs[4];
-  for (int i = 0 ; i < 4 ; i++) {
-    vecs[i].iov_base = &bufs[i][0];
-    vecs[i].iov_len = buflen;
-  }
+  uint32_t data_len = 128;
+  uint8_t *data = (uint8_t*) malloc(data_len);
+  randombytes_buf(data, data_len);
 
   // Encode through a pipe, transcode to a file, decode from file
   int pipes[2];
   ASSERT_EQ(0, pipe(pipes));
   
-  char tmpfilename[12] = "/tmp/XXXXXX";
-  int tmp_fd = mkstemp(tmpfilename);
-  ASSERT_GT(tmp_fd, 0);
-
   unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
   randombytes_buf(key, crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
   int term_id = 1;
   int client_idx = 2;
   int entry_idx = 3;
+  uint16_t client_short_id;
   traft_entry_id this_entry, prev_entry, quorum_entry;
   this_entry.term_id = term_id;
   this_entry.idx = entry_idx;
@@ -101,31 +55,31 @@ TEST (BuffersTest, Encoding) {
   quorum_entry.idx = entry_idx - 1;
 
   // init buffers and send fwd_entries_req
-  ASSERT_EQ(0, traft_buf_alloc(&b, allBuffsLen));
-  ASSERT_EQ(0, traft_buf_encode_and_send(&b, pipes[1], term_id, client_idx, key, vecs, 4));
-  // transcode from leader side
-  // first, read fwd_entries_req from client
-  forward_entries_req fwd_req;
-  read_all(pipes[0], (uint8_t*) &fwd_req, RPC_REQ_LEN);
-  // leader transcode out to clients
-  ASSERT_EQ(0, traft_buf_transcode(&b, pipes[0], key, &fwd_req, this_entry, prev_entry, quorum_entry));
-	write_all(tmp_fd, b.main_buffer, b.message_size);
-	fsync(tmp_fd);
-
-  // read append_entries req from leader, follower-side
-	lseek(tmp_fd, 0, SEEK_SET);
-  append_entries_req leader_header;
-	ASSERT_EQ(0, traft_buf_decode(&b, &leader_header, tmp_fd, key));
+  ASSERT_EQ(0, traft_buff_alloc(&b, data_len));
+  ASSERT_EQ(0, traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len));
   
-  ASSERT_EQ(0, traft_buf_view_iovecs(&b, &vecs[0], 4));
+  // exercise write/read of a traft_newentry_req
+  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[0]));
+  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[1]));
 
-  for (int i = 0 ; i < 4 ; i++) {
-    ASSERT_EQ(0, memcmp(bufs[i], vecs[i].iov_base, buflen));
-  }
+  // leader transcode out to clients
+  ASSERT_EQ(0, traft_buff_transcode_leader(&b, key,key, this_entry, prev_entry, quorum_entry));
 
-  for (int i = 0 ; i < 4 ; i++) {
-    free(bufs[i]);
-  }
-  traft_buf_free(&b);
+  // write/read of appendentry_req
+  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[0]));
+  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[1]));
+
+
+  // decode
+  traft_buff out_buff;
+  ASSERT_EQ(0, traft_buff_alloc(&out_buff, data_len));
+  ASSERT_EQ(0, traft_buff_decode(&b, &out_buff, key));
+
+  // assert contents
+  ASSERT_EQ(0, memcmp(out_buff.buff + RPC_REQ_LEN, data, data_len));
+
+  traft_buff_free(&b);
+  traft_buff_free(&out_buff);
+
 }
   

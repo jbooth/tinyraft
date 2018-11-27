@@ -16,9 +16,9 @@ typedef struct traft_rwlock_t {
   uint32_t        writeno; // Random number set after each write, used to wait on a change 
 } traft_rwlock_t;
 
-int traft_wrlock_init(traft_rwlock_t *rwlock);
+int traft_rwlock_init(traft_rwlock_t *rwlock);
 
-int traft_wrlock_destroy(traft_rwlock_t *rwlock);
+int traft_rwlock_destroy(traft_rwlock_t *rwlock);
 
 int traft_rwlock_rdlock(traft_rwlock_t *rwlock);
 
