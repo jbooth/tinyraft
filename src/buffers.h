@@ -71,6 +71,8 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff,  unsigned char *termk
 
 
 typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
+
+/** termconfig struct attached to termlog struct, used to encode/decode entries.  */
 typedef struct traft_termconfig {
   traft_cluster_config  cluster_cfg;  // 4680
   traft_termkey         termkey;      // +32 = 4712
@@ -78,8 +80,21 @@ typedef struct traft_termconfig {
   uint64_t              term_id;      // +8  = 4752
 } traft_termconfig;
 
-/** Decodes term config from a message body */
-int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg);
+/** Decodes term config from a message body, decrypting our termkey for this node */
+int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg, traft_pub_key my_id);
+
+/** Internal info about a peer that we don't expose to users */
+typedef struct traft_peercfg_private {
+  traft_pub_key client_id;  // 32, identity of this client
+  traft_termkey enckey;     // 64 key encrypted with leader's pubkey
+  uint16_t      short_id;   // 66 short ID of this client for this term
+  uint8_t       padding[6];
+} traft_peercfg_private;
+/** Stored termconfig, containing termkey as encrypted for all nodes */
+typedef struct traft_termconfig_all {
+  traft_cluster_config cluster_cfg;
+  
+} traft_termconfig_all;
 
 #ifdef __cplusplus
 }

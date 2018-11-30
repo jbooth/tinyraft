@@ -82,6 +82,7 @@ static int init_termlog(traft_termlog *log, const char *entries_file) {
   log->map_len = map_len;
   log->header = (traft_log_header*) map;
   log->entries = (traft_log_entry_md*) (map + sizeof(header));
+  // TODO set up cfg and termkey
   return traft_rwlock_init(&log->lock);
 }
 
@@ -95,7 +96,7 @@ int traft_termlog_open(traft_termlog *log, const char *basedir, uint64_t term_id
   if (log->entries_fd == -1) {
     return -1;
   }
-  return map_entries(log, file_path);
+  return init_termlog(log, file_path);
 }
 
 int traft_termlog_create(traft_termlog *log, const char *basedir, uint64_t term_id, uint32_t num_entries) {
