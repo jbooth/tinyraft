@@ -83,6 +83,11 @@ static inline void nonce_for_client(uint32_t client_idx, uint16_t client_id, non
   memcpy(nonce+4, &client_id, 2);
 }
 
+static inline void nonce_for_i64(uint64_t term_id, nonceval *nonce) {
+  memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+  memcpy(nonce, &i, 8);
+}
+
 int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx, uint16_t client_short_id,
                     unsigned char *key, uint8_t *entry_data, int32_t entry_len) {
   // Set up header into buffer
@@ -263,4 +268,75 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, unsigned char *termke
   }
   out_buff->msg_size = output_length;
   return 0;
+}
+
+// Used to encode a termkey for each peer, their eyes only
+typedef struct termkey_bin {
+  traft_pub_key peer_id; // 32
+  uint8_t       boxed_termkey[48]; // 80, 32 bytes key + 16 bytes MAC
+} termkey_bin;
+
+// serialized representation of termconfig as appendentry body
+typedef struct termconfig_bin {
+  traft_cluster_config  cluster_cfg;        // 4688
+  termkey_bin   termkeys[TRAFT_MAX_PEERS];  // + (80 * 16) = 5968
+  uint64_t      term_id;                    // 5976
+  traft_pub_key leader_id;                  // 6008
+} termconfig_bin;
+#define TRAFT_TERMCONFIG_BIN_SIZE 6008
+
+int traft_gen_termconfig(const uint8_t *buff, traft_cluster_config *membership, 
+                          uint64_t term_id, traft_entry_id prev_idx, 
+                          traft_pub_key my_id, const uint8_t *leader_private_key) {
+  // TODO setup ae header
+  memset(header, 0, RPC_REQ_LEN);
+  traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
+
+  // view buff as termconfig_bin
+  uint8_t *body_section = buff->buff + RPC_REQ_LEN;
+  termconfig_bin *bin_cfg_view = (termconfig_bin*) body_section;
+
+  // copy structs
+  memcpy(&bin_cfg_view->cluster_cfg, membership, TRAFT_CLUSTER_CONFIG_SIZE);
+  bin_cfg_view->term_id = term_id;
+  bin_cfg_view->leader_id = my_id;
+  // gen keys
+  char termkey[32];
+  crypto_secretbox_keygen(termkey);
+  nonceval termnonce;
+  nonce_for_i64(nonceval, term_id);
+  for (int i = 0 ; i < orig_cfg->num_members ; i++) {
+    bin_cfg_view->termkeys[i].peer_id = membership->peer_ids[i];
+    if (crypto_box_easy(&bin_cfg_view->termkeys[i].boxed_termkey, termkey, 32, termnonce, membership->peer_ids[i], leader_private_key) != 0) {
+      // encryption error
+      return -1;
+    }
+  }
+  return 0;
+}
+
+int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg, traft_pub_key my_id, uint8_t *my_secret_key) {
+  // view buff as termconfig_bin
+  traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
+  uint8_t *body_section = buff->buff + RPC_REQ_LEN;
+  termconfig_bin *bin_cfg_view = (termconfig_bin*) body_section;
+  // copy structs
+  memcpy(&cfg->cluster_cfg, &bin_cfg_view->cluster_cfg,  TRAFT_CLUSTER_CONFIG_SIZE);
+  cfg->term_id = bin_cfg_view->term_id;
+  cfg->leader_id = bin_cfg_view->leader_id;
+  // find our key
+  nonceval termnonce;
+  nonce_for_i64(nonceval, bin_cfg_view->term_id);
+  for (int i = 0 ; i < bin_cfg_view->cluster_cfg->num_peers ; i++) {
+    if (memcmp(bin_cfg_view->termkeys[i].peer_id, &my_id, 32) == 0) {
+      if (crypto_box_open_easy(&cfg->termkey, &bin_cfg_view->termkeys[i].boxed_termkey, 48, 
+                                termnonce, bin_cfg_view->leader_id, my_secret_key) != 0) {
+        // decryption error
+        return -1;
+      }
+      return 0;
+    }
+  }
+  // my_id not found in membership
+  return -1;
 }
