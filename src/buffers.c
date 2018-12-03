@@ -285,8 +285,8 @@ typedef struct termconfig_bin {
 } termconfig_bin;
 #define TRAFT_TERMCONFIG_BIN_SIZE 6008
 
-int traft_gen_termconfig(const uint8_t *buff, traft_cluster_config *membership, 
-                          uint64_t term_id, traft_entry_id prev_idx, 
+int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership,
+                          uint64_t term_id, traft_entry_id prev_idx,
                           traft_pub_key my_id, const uint8_t *leader_private_key) {
   // TODO setup ae header
   memset(header, 0, RPC_REQ_LEN);
@@ -315,7 +315,7 @@ int traft_gen_termconfig(const uint8_t *buff, traft_cluster_config *membership,
   return 0;
 }
 
-int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg, traft_pub_key my_id, uint8_t *my_secret_key) {
+int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, traft_pub_key my_id, const uint8_t *my_secret_key) {
   // view buff as termconfig_bin
   traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;
@@ -329,7 +329,7 @@ int traft_deser_termconfig(const uint8_t *buff, traft_termconfig *cfg, traft_pub
   nonce_for_i64(nonceval, bin_cfg_view->term_id);
   for (int i = 0 ; i < bin_cfg_view->cluster_cfg->num_peers ; i++) {
     if (memcmp(bin_cfg_view->termkeys[i].peer_id, &my_id, 32) == 0) {
-      if (crypto_box_open_easy(&cfg->termkey, &bin_cfg_view->termkeys[i].boxed_termkey, 48, 
+      if (crypto_box_open_easy(&cfg->termkey, &bin_cfg_view->termkeys[i].boxed_termkey, 48,
                                 termnonce, bin_cfg_view->leader_id, my_secret_key) != 0) {
         // decryption error
         return -1;

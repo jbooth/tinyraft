@@ -108,21 +108,21 @@ typedef struct traft_cluster_config {
   int64_t     max_snapshot_age_sec; // 24
 
   // The following values operate independently in that we'll try to discard old terms from disk if any are exceeded.
-  // However, we will always maintain at least 2 terms on disk.  
+  // However, we will always maintain at least 2 terms on disk.
   int64_t     max_retained_age_sec;  // 32, Will try to discard any terms who's last entry is older than this.
   int64_t     max_retained_bytes;    // 40, Will try to evict terms until we're below this total threshold.
 
-	// Cluster membership: IDs and hostname/ports
-	uint16_t							ports[TRAFT_MAX_PEERS];						// + 2  * 16 = 72
-	traft_pub_key				 	peer_ids[TRAFT_MAX_PEERS];				// + 32 * 16 = 584
-	char									hostnames[TRAFT_MAX_PEERS][256];	// + 4096 = 4680
-  uint64_t              num_peers;                        // 4688
+  // Cluster membership: IDs and hostname/ports
+  uint16_t        ports[TRAFT_MAX_PEERS];           // + 2  * 16 = 72
+  traft_pub_key   peer_ids[TRAFT_MAX_PEERS];        // + 32 * 16 = 584
+  char            hostnames[TRAFT_MAX_PEERS][256];  // + 4096 = 4680
+  uint64_t        num_peers;                  // 4688
 } traft_cluster_config;
 #define TRAFT_CLUSTER_CONFIG_SIZE 4688
 
 typedef struct traft_raftlet_identity {
-	traft_pub_key			raftlet_id; // 32
-	traft_secret_key	secret_key;	// 64
+  traft_pub_key     raftlet_id; // 32
+  traft_secret_key  secret_key; // 64
 } traft_raftlet_identity;
 
 #define TRAFT_PEER_INFO_SIZE 296
