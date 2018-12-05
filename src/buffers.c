@@ -318,7 +318,7 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
   for (int i = 0 ; i < membership->num_peers ; i++) {
     termkey_bin bintk;
     memcpy(bintk.peer_id, membership->peer_ids[i], 32);
-    if (crypto_box_easy(&bintk.boxed_termkey, termkey, 32, termnonce, membership->peer_ids[i], leader_private_key) != 0) {
+    if (crypto_box_easy(bintk.boxed_termkey, termkey, 32, termnonce, membership->peer_ids[i], leader_private_key) != 0) {
       // encryption error
       return -1;
     }
@@ -341,7 +341,7 @@ int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_
   nonce_for_i64(bin_cfg_view->term_id, &termnonce);
   for (int i = 0 ; i < bin_cfg_view->cluster_cfg.num_peers ; i++) {
     if (memcmp(bin_cfg_view->termkeys[i].peer_id, &my_id, 32) == 0) {
-      if (crypto_box_open_easy(&cfg->termkey, &bin_cfg_view->termkeys[i].boxed_termkey, 48,
+      if (crypto_box_open_easy(cfg->termkey, bin_cfg_view->termkeys[i].boxed_termkey, 48,
                                 termnonce, bin_cfg_view->leader_id, my_secret_key) != 0) {
         // decryption error
         return -1;
