@@ -311,7 +311,7 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
   bin_cfg_view->term_id = term_id;
   memcpy(&bin_cfg_view->leader_id, leader_id, 32); 
   // gen keys
-  char termkey[32];
+  uint8_t termkey[32];
   crypto_secretbox_keygen(termkey);
   nonceval termnonce;
   nonce_for_i64(term_id, &termnonce);
