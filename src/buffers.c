@@ -83,7 +83,7 @@ static inline void nonce_for_client(uint32_t client_idx, uint16_t client_id, non
   memcpy(nonce+4, &client_id, 2);
 }
 
-static inline void nonce_for_i64(uint64_t term_id, nonceval *nonce) {
+static inline void nonce_for_i64(uint64_t i, nonceval *nonce) {
   memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
   memcpy(nonce, &i, 8);
 }
@@ -239,7 +239,7 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b) {
 }
 
 
-int traft_buff_decode(traft_buff *b, traft_buff *out_buff, unsigned char *termkey) {
+int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termkey) {
   traft_appendentry_req *header = (traft_appendentry_req*) b->buff;
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
   
@@ -285,12 +285,22 @@ typedef struct termconfig_bin {
 } termconfig_bin;
 #define TRAFT_TERMCONFIG_BIN_SIZE 6008
 
-int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership,
-                          uint64_t term_id, traft_entry_id prev_idx,
-                          traft_pub_key my_id, const uint8_t *leader_private_key) {
+int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uint64_t term_id, traft_entry_id prev_idx, traft_entry_id quorum_idx, const uint8_t *leader_id, const uint8_t *leader_private_key) {
+  if (buff->max_msg_size < TRAFT_TERMCONFIG_BIN_SIZE + RPC_REQ_LEN) {
+    // buffers too small, should never happen
+    return -1;
+  }
   // TODO setup ae header
-  memset(header, 0, RPC_REQ_LEN);
   traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
+  memset(header, 0, RPC_REQ_LEN);
+  header->this_term = term_id;
+  header->this_idx = 0;
+  header->prev_term = prev_idx.term_id;
+  header->prev_idx = prev_idx.idx;
+  header->quorum_term = quorum_idx.term_id;
+  header->quorum_idx = quorum_idx.idx;
+  header->body_len = TRAFT_TERMCONFIG_BIN_SIZE;
+  header->message_type = TRAFT_REQTYPE_APPENDENTRY;
 
   // view buff as termconfig_bin
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;
@@ -299,23 +309,25 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership,
   // copy structs
   memcpy(&bin_cfg_view->cluster_cfg, membership, TRAFT_CLUSTER_CONFIG_SIZE);
   bin_cfg_view->term_id = term_id;
-  bin_cfg_view->leader_id = my_id;
+  memcpy(&bin_cfg_view->leader_id, leader_id, 32); 
   // gen keys
   char termkey[32];
   crypto_secretbox_keygen(termkey);
   nonceval termnonce;
-  nonce_for_i64(nonceval, term_id);
-  for (int i = 0 ; i < orig_cfg->num_members ; i++) {
-    bin_cfg_view->termkeys[i].peer_id = membership->peer_ids[i];
-    if (crypto_box_easy(&bin_cfg_view->termkeys[i].boxed_termkey, termkey, 32, termnonce, membership->peer_ids[i], leader_private_key) != 0) {
+  nonce_for_i64(term_id, termnonce);
+  for (int i = 0 ; i < membership->num_peers ; i++) {
+    bin_termkey bintk;
+    bintk.peer_id = membership->peer_ids[i];
+    if (crypto_box_easy(&bintk.boxed_termkey, termkey, 32, termnonce, membership->peer_ids[i], leader_private_key) != 0) {
       // encryption error
       return -1;
     }
+    bin_cfg_view->termkey[i] = bintk;
   }
   return 0;
 }
 
-int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, traft_pub_key my_id, const uint8_t *my_secret_key) {
+int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_t *my_id, const uint8_t *my_secret_key) {
   // view buff as termconfig_bin
   traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;

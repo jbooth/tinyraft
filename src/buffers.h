@@ -67,7 +67,7 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
  *  State machine function.  Decrypts, authenticates and decompresses an encoded message.
  *  After completion, we'll have stored the decoded and decompressed body in out_buff.
  */
-int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const unsigned char *termkey);
+int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termkey);
 
 
 typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
@@ -81,12 +81,10 @@ typedef struct traft_termconfig {
 } traft_termconfig;
 
 /** Generates a termconfig and stores it in the provided buffer. */
-int traft_gen_termconfig(const uint8_t *buff, const traft_cluster_config *membership,
-                          uint64_t term_id, traft_entry_id prev_idx,
-                          traft_pub_key my_id, const uint8_t *leader_private_key);
+int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uint64_t term_id, traft_entry_id prev_idx, traft_entry_id quorum_idx, const uint8_t *leader_id, const uint8_t *leader_private_key);
 
 /** Decodes term config from an appendentries request, decrypting our termkey for this node. */
-int traft_deser_termconfig(traft_buff *b, traft_termconfig *cfg, traft_pub_key my_id);
+int traft_deser_termconfig(traft_buff *b, traft_termconfig *cfg, const uint8_t *my_id, const uint8_t *my_secret_key);
 
 
 #ifdef __cplusplus
