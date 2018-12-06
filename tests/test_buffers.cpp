@@ -34,6 +34,7 @@ TEST (BuffersTest, Encoding) {
   uint32_t data_len = 128;
   uint8_t *data = (uint8_t*) malloc(data_len);
   randombytes_buf(data, data_len);
+  memcpy(data, "hello", 6);
 
   // Encode through a pipe, transcode to a file, decode from file
   int pipes[2];
@@ -83,7 +84,13 @@ TEST (BuffersTest, Encoding) {
   printf("decoded\n");
 
   // assert contents
-  ASSERT_EQ(0, memcmp(out_buff.buff + RPC_REQ_LEN, data, data_len));
+  char hex[512];
+  sodium_bin2hex(hex, 512, data, data_len);
+  printf("data %s\n", hex);
+  sodium_bin2hex(hex, 512, out_buff.buff, data_len);
+  printf("decoded %s\n", hex);
+
+  ASSERT_EQ(0, memcmp(out_buff.buff, data, data_len));
 
   traft_buff_free(&b);
   traft_buff_free(&out_buff);

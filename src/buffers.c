@@ -100,6 +100,13 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
 
   // Compress data behind header
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
+
+  char hex[512];
+  sodium_bin2hex(hex, 512, entry_data, entry_len);
+  printf("Initial Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&header->info, 24);
+  printf("Info section %s\n", hex);
+
   int compressed_size = LZ4_compress_default((char*) entry_data, (char*) body_section, entry_len, b->buff_size);
   if (compressed_size == 0) {
       return -1;
@@ -120,7 +127,12 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
 
   printf("encrypted\n");
 
-  
+  sodium_bin2hex(hex, 512, nonce, 12);
+  printf("Nonce hex %s\n", hex);
+  sodium_bin2hex(hex, 512, body_section, header->info.body_len);
+  printf("Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&header->info, 24);
+  printf("Info section %s\n", hex);
 /*  // remove this
   int buf_len = 64+90;
   int hex_len = (buf_len * 2) + 1;
@@ -134,7 +146,6 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
 
   // TODO remove
 /*  char nonce_hex[33];
-  sodium_bin2hex(nonce_hex, 25, nonce, 12);
   printf("Nonce i32 %d \n", header->client_idx);
   printf("Nonce hex: %s\n", nonce_hex);
   char AD_hex[(forward_entries_AD_len * 2) + 1];
@@ -170,6 +181,13 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   uint32_t msg_body_len = client_header->info.body_len;
   printf("body_len %d\n", client_header->info.body_len);
 
+  char hex[512];
+  sodium_bin2hex(hex, 512, client_nonce, 12);
+  printf("Nonce hex %s\n", hex);
+  sodium_bin2hex(hex, 512, body_section, client_header->info.body_len);
+  printf("Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&client_header->info, 24);
+  printf("Info section %s\n", hex);
 /*
   // TODO remove
   char nonce_hex[33];
@@ -236,6 +254,13 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   b->msg_size = RPC_REQ_LEN + leader_header->info.body_len;
   printf("transcoded msg size %d\n", b->msg_size);
 
+  sodium_bin2hex(hex, 512, leader_nonce, 12);
+  printf("Nonce hex %s\n", hex);
+  sodium_bin2hex(hex, 512, body_section, leader_header->info.body_len);
+  printf("Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&leader_header->info, 24);
+  printf("Info section %s\n", hex);
+
   // TODO remove
 /*
   printf("recrypted\n");
@@ -258,7 +283,18 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b) {
 int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termkey) {
   traft_appendentry_req *header = (traft_appendentry_req*) b->buff;
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
+
+  // Decrypt in place
+  nonceval nonce;
+  nonce_for_i32(header->this_idx, &nonce);
   
+  char hex[512];
+  sodium_bin2hex(hex, 512, nonce, 12);
+  printf("Nonce hex %s\n", hex);
+  sodium_bin2hex(hex, 512, body_section, header->info.body_len);
+  printf("Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&header->info, 24);
+  printf("Info section %s\n", hex);
   /*
   char hex[512];
   sodium_bin2hex(hex, 512, (uint8_t*)header, RPC_REQ_LEN);
@@ -268,9 +304,6 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
   sodium_bin2hex(hex, 512, header->auth_tag, 12);
   printf("MAC hex: %s\n", hex);
   */
-  // Decrypt in place
-  nonceval nonce;
-  nonce_for_i32(header->this_idx, &nonce);
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
       body_section, NULL, body_section, header->info.body_len,
       header->info.auth_tag, (unsigned char*)header, append_entries_AD_len,
@@ -284,7 +317,16 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
     printf("decompress error\n");
     return -1;
   }
+  printf("output length %d\n", output_length);
   out_buff->msg_size = output_length;
+
+  sodium_bin2hex(hex, 512, nonce, 12);
+  printf("Nonce hex %s\n", hex);
+  sodium_bin2hex(hex, 512, out_buff->buff, output_length);
+  printf("Message hex %s\n", hex);
+  sodium_bin2hex(hex, 512, (uint8_t*)&header->info, 24);
+  printf("Info section %s\n", hex);
+
   return 0;
 }
 
