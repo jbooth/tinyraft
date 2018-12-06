@@ -388,6 +388,9 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
 }
 
 int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_t *my_id, const uint8_t *my_secret_key) {
+  char hex[512];
+  sodium_bin2hex(hex, 512, my_id, 32);
+  printf("id: %s\n", hex);
   // view buff as termconfig_bin
   traft_appendentry_req *header = (traft_appendentry_req*) buff->buff;
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;
@@ -400,15 +403,19 @@ int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_
   nonceval termnonce;
   nonce_for_i64(bin_cfg_view->term_id, &termnonce);
   for (int i = 0 ; i < bin_cfg_view->cluster_cfg.num_peers ; i++) {
-    if (memcmp(bin_cfg_view->termkeys[i].peer_id, &my_id, 32) == 0) {
+    sodium_bin2hex(hex, 512, bin_cfg_view->termkeys[i].peer_id, 32);
+    printf("checking against key %s\n", hex);
+    if (memcmp(bin_cfg_view->termkeys[i].peer_id, my_id, 32) == 0) {
       if (crypto_box_open_easy(cfg->termkey, bin_cfg_view->termkeys[i].boxed_termkey, 48,
                                 termnonce, bin_cfg_view->leader_id, my_secret_key) != 0) {
         // decryption error
+        printf("decrypt error: %s \n", strerror(errno));
         return -1;
       }
       return 0;
     }
   }
   // my_id not found in membership
+  printf("bad id!\n");
   return -1;
 }

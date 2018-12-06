@@ -128,4 +128,14 @@ TEST (BuffersTest, TermConfig) {
   quorum_idx.idx = 9;
 
   ASSERT_EQ(0, traft_gen_termconfig(&buff, &cfg, term_id, prev_idx, quorum_idx, host1pk, host1sk));
+
+  traft_termconfig cfg1, cfg2, cfg3;
+
+  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg1, host1pk, host1sk));
+  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg2, host1pk, host1sk));
+  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg3, host1pk, host1sk));
+
+  ASSERT_EQ(0, memcmp(cfg1.termkey, cfg2.termkey, 32));
+  ASSERT_EQ(3, cfg1.cluster_cfg.num_peers);
+  ASSERT_EQ(0, memcmp(cfg2.cluster_cfg.hostnames[0], host1, strlen(host1)));
 }
