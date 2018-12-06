@@ -47,13 +47,11 @@ typedef struct traft_req {
 
 /** Request sent to the leader to add entries to the cluster */
 typedef struct traft_newentry_req {
-  uint64_t  term_id;        // 8  Term we're trying to append to, identifies our key
-  uint32_t  client_idx;     // 12 Monotonically increasing per-client value, resets on new term
-  uint32_t  body_len;       // 16 
-  uint16_t  client_id;      // 18 Client short ID
-  uint8_t   padding[29];    // 47
-  uint8_t   message_type;   // forward_entries
-  uint8_t   auth_tag[16];   // 64 Poly1305 MAC
+  uint64_t      term_id;        // 8  Term we're trying to append to, identifies our key
+  uint32_t      client_idx;     // 12 Monotonically increasing per-client value, resets on new term
+  uint16_t      client_id;      // 14 Client short ID
+  uint8_t       padding[26];    // 40
+  traft_reqinfo info;       // 64
 } traft_newentry_req;
 
 // Length, from front of struct, of section used as 'additional data' for MAC
@@ -65,16 +63,14 @@ typedef struct traft_newentry_req {
   * If the values for 'this' are all 0, this is a heartbeat request.
   */
 typedef struct traft_appendentry_req {
-  uint64_t  this_term;      // 8 , term of this entry
-  uint64_t  prev_term;      // 16, term of prev entry
-  uint64_t  quorum_term;    // 24, term of max quorum commit
-  uint32_t  this_idx;       // 28, termlog idx of this entry
-  uint32_t  prev_idx;       // 32, termlog idx of prev entry
-  uint32_t  quorum_idx;     // 36, termlog idx of max quorum commit
-  uint8_t   padding[4];     // 40
-  uint32_t  body_len;       // 40, length of body behind this header
-  uint8_t   message_type;   // 41, append_entries
-  uint8_t   auth_tag[16];   // 64, Poly1305 MAC
+  uint64_t      this_term;      // 8 , term of this entry
+  uint64_t      prev_term;      // 16, term of prev entry
+  uint64_t      quorum_term;    // 24, term of max quorum commit
+  uint32_t      this_idx;       // 28, termlog idx of this entry
+  uint32_t      prev_idx;       // 32, termlog idx of prev entry
+  uint32_t      quorum_idx;     // 36, termlog idx of max quorum commit
+  uint8_t       padding[4];     // 40
+  traft_reqinfo info;           // 64
 } traft_appendentry_req;
 
 // AE message types

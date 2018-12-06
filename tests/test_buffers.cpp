@@ -55,30 +55,32 @@ TEST (BuffersTest, Encoding) {
   quorum_entry.idx = entry_idx - 1;
 
   // init buffers and send fwd_entries_req
-  ASSERT_EQ(0, traft_buff_alloc(&b, data_len));
+  ASSERT_EQ(0, traft_buff_alloc(&b, data_len + RPC_REQ_LEN));
   printf("encoding...\n");
-  int encode_res = traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len);
+  int encode_res;
+  encode_res = traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len);
   printf("encoded\n");
   ASSERT_EQ(0, encode_res);
 
 
   // exercise write/read of a traft_newentry_req
   printf("msg size %d \n", b.msg_size);
-  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[0]));
-  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[1]));
+  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
+  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[0]));
 
   // leader transcode out to clients
   ASSERT_EQ(0, traft_buff_transcode_leader(&b, key,key, this_entry, prev_entry, quorum_entry));
 
   // write/read of appendentry_req
-  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[0]));
-  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[1]));
+  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
+  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[0]));
 
 
   // decode
   traft_buff out_buff;
   ASSERT_EQ(0, traft_buff_alloc(&out_buff, data_len));
   ASSERT_EQ(0, traft_buff_decode(&b, &out_buff, key));
+  printf("decoded\n");
 
   // assert contents
   ASSERT_EQ(0, memcmp(out_buff.buff + RPC_REQ_LEN, data, data_len));

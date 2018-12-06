@@ -139,14 +139,14 @@ static int append_entry_internal(traft_termlog *log, traft_appendentry_req *head
   if (traft_write_all(log->entries_fd, header, RPC_REQ_LEN) == -1) {
     return -1;
   }
-  if (traft_write_all(log->entries_fd, entry, header->body_len) == -1) {
+  if (traft_write_all(log->entries_fd, entry, header->info.body_len) == -1) {
     return -1;
   }
   // Update entries and notify readers
   traft_rwlock_wrlock(&log->lock);
   log->header->local_committed_idx++;
   log->entries[header->this_idx].entry_pos = (uint32_t)prev_eof;
-  log->entries[header->this_idx].entry_len = RPC_REQ_LEN + header->body_len;
+  log->entries[header->this_idx].entry_len = RPC_REQ_LEN + header->info.body_len;
   traft_rwlock_wrunlock(&log->lock);
   // Fsync before return
   if (fdatasync(log->entries_fd) == -1) {

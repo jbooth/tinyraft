@@ -30,6 +30,7 @@ void traft_buff_free(traft_buff *b) {
 // Writes all.  Returns 0 on success, -1 on failure.
 static int write_all(int fd, uint8_t *buf, size_t count) {
   while (count) {
+    printf("writing %d\n", count);
     ssize_t w = write(fd, buf, count);
     if (w == -1) {
       return -1;
@@ -59,6 +60,7 @@ int traft_buff_readreq(traft_buff *buff, int readfd) {
   traft_req *header = (traft_req*) buff->buff;
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;
   uint32_t body_len = header->info.body_len;
+  printf("reading body of len %d\n", body_len);
   err = read_all(readfd, body_section, (size_t)body_len);
   if (err != 0) { return err; }
   buff->msg_size = RPC_REQ_LEN + body_len;
@@ -80,7 +82,7 @@ static inline void nonce_for_i32(uint32_t i, nonceval *nonce) {
 static inline void nonce_for_client(uint32_t client_idx, uint16_t client_id, nonceval *nonce) {
   memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
   memcpy(nonce, &client_idx, 4);
-  memcpy(nonce+4, &client_id, 2);
+  //memcpy(nonce+4, &client_id, 2);
 }
 
 static inline void nonce_for_i64(uint64_t i, nonceval *nonce) {
@@ -102,16 +104,16 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
   if (compressed_size == 0) {
       return -1;
   }
-  printf("compressed.\n");
+  printf("compressed size %d.\n", compressed_size);
   b->msg_size = compressed_size + RPC_REQ_LEN;
-  header->body_len = compressed_size;
+  header->info.body_len = compressed_size;
 
   // Encrypt compressed data in place, storing auth tag in header.
   nonceval nonce;
   nonce_for_client(client_idx, client_short_id, &nonce);
 
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-        body_section, header->auth_tag, NULL, body_section, header->body_len,
+        body_section, header->info.auth_tag, NULL, body_section, header->info.body_len,
         (unsigned char*) header, forward_entries_AD_len, NULL, nonce, key) == -1) {
     return -1;
   }
@@ -119,11 +121,12 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
   printf("encrypted\n");
 
   
-  // remove this
+/*  // remove this
   int buf_len = 64+90;
   int hex_len = (buf_len * 2) + 1;
   char hex_buf[350];
   printf("bin2hex\n");
+  */
   //
   //sodium_bin2hex(hex_buf, 350, b->buff, b->msg_size);
   //printf("message hex: %s\n", hex_buf);
@@ -158,12 +161,16 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
 
   printf("TRANSCODE \n\n");
   // Get view of client header, calculate nonce
-	traft_newentry_req *client_header = (traft_newentry_req*) b->buff;
+  traft_newentry_req *client_header = (traft_newentry_req*) b->buff;
+  printf("header addr %d\n", client_header);
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
+  printf("body addr %d\n", body_section);
   nonceval client_nonce;
   nonce_for_client(client_header->client_idx, client_header->client_id, &client_nonce);
+  uint32_t msg_body_len = client_header->info.body_len;
+  printf("body_len %d\n", client_header->info.body_len);
 
-
+/*
   // TODO remove
   char nonce_hex[33];
   sodium_bin2hex(nonce_hex, 25, client_nonce, 12);
@@ -193,11 +200,11 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   printf("t: message hex: %s\n", hex_buf);
   printf("header->body_len %d\n", client_header->body_len);
   // end remove 
-
+*/
   // Authenticate and decrypt in place using client nonce
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-      body_section, NULL, body_section, client_header->body_len, 
-      client_header->auth_tag, (unsigned char*)client_header, forward_entries_AD_len,
+      body_section, NULL, body_section, client_header->info.body_len, 
+      client_header->info.auth_tag, (unsigned char*)client_header, forward_entries_AD_len,
       client_nonce, message_termkey) == -1) {
     printf("decrypt error: %s \n", strerror(errno));
     return -1;
@@ -213,19 +220,24 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   leader_header->prev_idx = prev_entry.idx;
   leader_header->quorum_term = quorum_entry.term_id;
   leader_header->quorum_idx = quorum_entry.idx;
+  leader_header->info.req_type = TRAFT_REQTYPE_APPENDENTRY;
   // Use index into current term as nonce
   nonceval leader_nonce;
   nonce_for_i32(leader_header->this_idx, &leader_nonce);
-  leader_header->body_len = client_header->body_len;
+  leader_header->info.body_len = msg_body_len;
+  printf("body_len %d\n", leader_header->info.body_len);
 
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-			body_section, leader_header->auth_tag, NULL, body_section, leader_header->body_len, 
+			body_section, leader_header->info.auth_tag, NULL, body_section, leader_header->info.body_len,
 			(unsigned char*) leader_header, append_entries_AD_len, NULL, leader_nonce, leader_termkey) == -1) {
 		return -1;
 	}
-  b->msg_size = RPC_REQ_LEN + leader_header->body_len;
+  printf("recrypted\n");
+  b->msg_size = RPC_REQ_LEN + leader_header->info.body_len;
+  printf("transcoded msg size %d\n", b->msg_size);
 
   // TODO remove
+/*
   printf("recrypted\n");
   sodium_bin2hex(message_hex, 512, b->buff, b->msg_size);
   printf("buffer contents after recrypt: %s\n", message_hex);
@@ -233,6 +245,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   printf("encrypted with MAC %s\n", message_hex);
   sodium_bin2hex(message_hex, 512, leader_nonce, 12);
   // end remove
+  */
   return 0;
 }
 
@@ -246,6 +259,7 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
   traft_appendentry_req *header = (traft_appendentry_req*) b->buff;
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
   
+  /*
   char hex[512];
   sodium_bin2hex(hex, 512, (uint8_t*)header, RPC_REQ_LEN);
   printf("header %s\n", hex);
@@ -253,18 +267,19 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
   printf("body %s\n", hex);
   sodium_bin2hex(hex, 512, header->auth_tag, 12);
   printf("MAC hex: %s\n", hex);
+  */
   // Decrypt in place
   nonceval nonce;
   nonce_for_i32(header->this_idx, &nonce);
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-      body_section, NULL, body_section, header->body_len,
-      header->auth_tag, (unsigned char*)header, append_entries_AD_len,
+      body_section, NULL, body_section, header->info.body_len,
+      header->info.auth_tag, (unsigned char*)header, append_entries_AD_len,
       nonce, termkey) == -1) {
     printf("decrypt error\n");
     return -1;
   }
   // Decompress to output buffer
-  int output_length = LZ4_decompress_safe((char*) body_section, (char*) out_buff->buff, header->body_len, b->buff_size);
+  int output_length = LZ4_decompress_safe((char*) body_section, (char*) out_buff->buff, header->info.body_len, b->buff_size);
   if (output_length < 0) {
     printf("decompress error\n");
     return -1;
@@ -302,8 +317,8 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
   header->prev_idx = prev_idx.idx;
   header->quorum_term = quorum_idx.term_id;
   header->quorum_idx = quorum_idx.idx;
-  header->body_len = TRAFT_TERMCONFIG_BIN_SIZE;
-  header->message_type = TRAFT_REQTYPE_APPENDENTRY;
+  header->info.body_len = TRAFT_TERMCONFIG_BIN_SIZE;
+  header->info.req_type = TRAFT_REQTYPE_APPENDENTRY;
 
   // view buff as termconfig_bin
   uint8_t *body_section = buff->buff + RPC_REQ_LEN;
