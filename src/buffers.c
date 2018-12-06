@@ -118,21 +118,23 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
 
   printf("encrypted\n");
 
+  
   // remove this
   int buf_len = 64+90;
   int hex_len = (buf_len * 2) + 1;
   char hex_buf[350];
-  sodium_bin2hex(hex_buf, 350, b->buff, b->msg_size);
-  printf("message hex: %s\n", hex_buf);
-  char buf_contents[64+90];
+  printf("bin2hex\n");
+  //
+  //sodium_bin2hex(hex_buf, 350, b->buff, b->msg_size);
+  //printf("message hex: %s\n", hex_buf);
   // end remove
 
   // TODO remove
-  char nonce_hex[33];
+/*  char nonce_hex[33];
   sodium_bin2hex(nonce_hex, 25, nonce, 12);
   printf("Nonce i32 %d \n", header->client_idx);
   printf("Nonce hex: %s\n", nonce_hex);
-  char AD_hex[33];
+  char AD_hex[(forward_entries_AD_len * 2) + 1];
   sodium_bin2hex(AD_hex, 33, (unsigned char*)header, forward_entries_AD_len);
   printf("AD hex: %s\n", AD_hex);
   char message_hex[512];
@@ -146,7 +148,8 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
   printf("mac hex %s\n", mac_hex);
   printf("header->body_len %d\n", header->body_len);
   // end remove 
-
+*/
+  printf("encode returning \n");
   return 0;
 }
 

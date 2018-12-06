@@ -25,8 +25,8 @@
 #include "wiretypes.h"
 #include "buffers.h"
 #include "buffers.c"
-  
-TEST (BuffersTest, Encoding) { 
+
+TEST (BuffersTest, Encoding) {
   ASSERT_EQ(64, sizeof(traft_appendentry_req));
   ASSERT_EQ(64, sizeof(traft_newentry_req));
   traft_buff b;
@@ -38,7 +38,7 @@ TEST (BuffersTest, Encoding) {
   // Encode through a pipe, transcode to a file, decode from file
   int pipes[2];
   ASSERT_EQ(0, pipe(pipes));
-  
+
   unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
   randombytes_buf(key, crypto_aead_chacha20poly1305_ietf_KEYBYTES);
 
@@ -56,9 +56,14 @@ TEST (BuffersTest, Encoding) {
 
   // init buffers and send fwd_entries_req
   ASSERT_EQ(0, traft_buff_alloc(&b, data_len));
-  ASSERT_EQ(0, traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len));
-  
+  printf("encoding...\n");
+  int encode_res = traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len);
+  printf("encoded\n");
+  ASSERT_EQ(0, encode_res);
+
+
   // exercise write/read of a traft_newentry_req
+  printf("msg size %d \n", b.msg_size);
   ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[0]));
   ASSERT_EQ(0, traft_buff_readreq(&b, pipes[1]));
 
@@ -82,4 +87,36 @@ TEST (BuffersTest, Encoding) {
   traft_buff_free(&out_buff);
 
 }
-  
+
+TEST (BuffersTest, TermConfig) {
+  const char *host1 = "maggie";
+  const char *host2 = "leo";
+  const char *host3 = "eanan";
+
+
+  uint8_t host1pk[32], host1sk[32], host2pk[32], host2sk[32], host3pk[32], host3sk[32];
+  crypto_box_keypair(host1pk, host1sk);
+  crypto_box_keypair(host2pk, host2sk);
+  crypto_box_keypair(host3pk, host3sk);
+
+  traft_cluster_config cfg;
+  memcpy(cfg.hostnames[0], host1, strlen(host1) + 1);
+  memcpy(cfg.peer_ids[0], host1pk, 32);
+  memcpy(cfg.hostnames[1], host1, strlen(host2) + 1);
+  memcpy(cfg.peer_ids[1], host2pk, 32);
+  memcpy(cfg.hostnames[2], host1, strlen(host3) + 1);
+  memcpy(cfg.peer_ids[2], host3pk, 32);
+  cfg.num_peers = 3;
+
+  traft_buff buff;
+  ASSERT_EQ(0, traft_buff_alloc(&buff, TRAFT_CLUSTER_CONFIG_SIZE * 2));
+  uint64_t term_id = 5;
+  traft_entry_id prev_idx;
+  prev_idx.term_id = 4;
+  prev_idx.idx = 10;
+  traft_entry_id quorum_idx;
+  quorum_idx.term_id = 4;
+  quorum_idx.idx = 9;
+
+  ASSERT_EQ(0, traft_gen_termconfig(&buff, &cfg, term_id, prev_idx, quorum_idx, host1pk, host1sk));
+}
