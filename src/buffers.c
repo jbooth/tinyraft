@@ -71,22 +71,22 @@ int traft_buff_writemsg(traft_buff *buff, int writefd) {
   return write_all(writefd, buff->buff, buff->msg_size);
 }
 
-typedef unsigned char nonceval[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+typedef unsigned char nonceval[crypto_box_curve25519xchacha20poly1305_NONCEBYTES];
 
 // Sets a nonce with all zeros except the first 4 bytes, which are the provided uint32.
 static inline void nonce_for_i32(uint32_t i, nonceval *nonce) {
-  memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+  memset(nonce, 0, crypto_box_curve25519xchacha20poly1305_NONCEBYTES);
   memcpy(nonce, &i, 4);
 }
 
 static inline void nonce_for_client(uint32_t client_idx, uint16_t client_id, nonceval *nonce) {
-  memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+  memset(nonce, 0, crypto_box_curve25519xchacha20poly1305_NONCEBYTES);
   memcpy(nonce, &client_idx, 4);
-  //memcpy(nonce+4, &client_id, 2);
+  //memcpy(((uint8_t*)nonce)+4, &client_id, 2);
 }
 
 static inline void nonce_for_i64(uint64_t i, nonceval *nonce) {
-  memset(nonce, 0, crypto_aead_chacha20poly1305_IETF_NPUBBYTES);
+  memset(nonce, 0, crypto_box_curve25519xchacha20poly1305_NONCEBYTES);
   memcpy(nonce, &i, 8);
 }
 
@@ -97,6 +97,7 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
   memset(header, 0, RPC_REQ_LEN);
   header->term_id = term_id;
   header->client_idx = client_idx;
+  header->client_id = client_short_id;
 
   // Compress data behind header
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
@@ -119,7 +120,7 @@ int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx
   nonceval nonce;
   nonce_for_client(client_idx, client_short_id, &nonce);
 
-  if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
+  if (crypto_aead_xchacha20poly1305_ietf_encrypt_detached(
         body_section, header->info.auth_tag, NULL, body_section, header->info.body_len,
         (unsigned char*) header, forward_entries_AD_len, NULL, nonce, key) == -1) {
     return -1;
@@ -220,7 +221,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   // end remove 
 */
   // Authenticate and decrypt in place using client nonce
-  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+  if (crypto_aead_xchacha20poly1305_ietf_decrypt_detached(
       body_section, NULL, body_section, client_header->info.body_len, 
       client_header->info.auth_tag, (unsigned char*)client_header, forward_entries_AD_len,
       client_nonce, message_termkey) == -1) {
@@ -245,7 +246,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   leader_header->info.body_len = msg_body_len;
   printf("body_len %d\n", leader_header->info.body_len);
 
-  if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
+  if (crypto_aead_xchacha20poly1305_ietf_encrypt_detached(
 			body_section, leader_header->info.auth_tag, NULL, body_section, leader_header->info.body_len,
 			(unsigned char*) leader_header, append_entries_AD_len, NULL, leader_nonce, leader_termkey) == -1) {
 		return -1;
@@ -304,7 +305,7 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
   sodium_bin2hex(hex, 512, header->auth_tag, 12);
   printf("MAC hex: %s\n", hex);
   */
-  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+  if (crypto_aead_xchacha20poly1305_ietf_decrypt_detached(
       body_section, NULL, body_section, header->info.body_len,
       header->info.auth_tag, (unsigned char*)header, append_entries_AD_len,
       nonce, termkey) == -1) {
@@ -375,6 +376,9 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
   crypto_secretbox_keygen(termkey);
   nonceval termnonce;
   nonce_for_i64(term_id, &termnonce);
+  char hex[512];
+  sodium_bin2hex(hex, 512, termkey, 32);
+  printf("termkey %s\n", hex);
   for (int i = 0 ; i < membership->num_peers ; i++) {
     termkey_bin bintk;
     memcpy(bintk.peer_id, membership->peer_ids[i], 32);
@@ -382,6 +386,10 @@ int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uin
       // encryption error
       return -1;
     }
+    sodium_bin2hex(hex, 512, membership->peer_ids[i], 32);
+    printf("peer_id %s\n", hex);
+    sodium_bin2hex(hex, 512, bintk.boxed_termkey, 48);
+    printf("boxed termkey %s\n", hex);
     bin_cfg_view->termkeys[i] = bintk;
   }
   return 0;
@@ -398,14 +406,21 @@ int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_
   // copy structs
   memcpy(&cfg->cluster_cfg, &bin_cfg_view->cluster_cfg,  TRAFT_CLUSTER_CONFIG_SIZE);
   cfg->term_id = bin_cfg_view->term_id;
+  printf("term_id %d", bin_cfg_view->term_id);
   memcpy(cfg->leader_id, bin_cfg_view->leader_id, 32);
   // find our key
   nonceval termnonce;
   nonce_for_i64(bin_cfg_view->term_id, &termnonce);
+  printf("decoding termconfig\n");
   for (int i = 0 ; i < bin_cfg_view->cluster_cfg.num_peers ; i++) {
     sodium_bin2hex(hex, 512, bin_cfg_view->termkeys[i].peer_id, 32);
     printf("checking against key %s\n", hex);
     if (memcmp(bin_cfg_view->termkeys[i].peer_id, my_id, 32) == 0) {
+      char hex[512];
+      sodium_bin2hex(hex, 512, bin_cfg_view->cluster_cfg.peer_ids[i], 32);
+      printf("peer_id %s\n", hex);
+      sodium_bin2hex(hex, 512, bin_cfg_view->termkeys[i].boxed_termkey, 48);
+      printf("boxed termkey %s\n", hex);
       if (crypto_box_open_easy(cfg->termkey, bin_cfg_view->termkeys[i].boxed_termkey, 48,
                                 termnonce, bin_cfg_view->leader_id, my_secret_key) != 0) {
         // decryption error
@@ -416,6 +431,6 @@ int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_
     }
   }
   // my_id not found in membership
-  printf("bad id!\n");
+  printf("id not found\n");
   return -1;
 }

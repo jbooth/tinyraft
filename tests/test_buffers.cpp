@@ -132,8 +132,8 @@ TEST (BuffersTest, TermConfig) {
   traft_termconfig cfg1, cfg2, cfg3;
 
   ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg1, host1pk, host1sk));
-  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg2, host1pk, host1sk));
-  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg3, host1pk, host1sk));
+  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg2, host2pk, host2sk));
+  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg3, host3pk, host3sk));
 
   ASSERT_EQ(0, memcmp(cfg1.termkey, cfg2.termkey, 32));
   ASSERT_EQ(3, cfg1.cluster_cfg.num_peers);
