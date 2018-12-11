@@ -29,6 +29,7 @@ extern "C" {
 #define TRAFT_REQTYPE_NEWENTRY    1
 #define TRAFT_REQTYPE_APPENDENTRY 2
 #define TRAFT_REQTYPE_REQVOTE     3
+#define TRAFT_REQTYPE_HELLO       4
 
 /** Common to all requests, always the last 24 bytes */
 typedef struct traft_reqinfo {
@@ -44,6 +45,13 @@ typedef struct traft_req {
   traft_reqinfo info;         // 64
 } traft_req;
 #define RPC_REQ_LEN 64 
+
+/** */
+typedef struct traft_hello_req {
+  uint8_t       my_id[32];
+  uint8_t       padding[8];
+  traft_reqinfo info;
+} traft_hello_req;
 
 /** Request sent to the leader to add entries to the cluster */
 typedef struct traft_newentry_req {

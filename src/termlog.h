@@ -41,7 +41,7 @@ typedef struct traft_log_entry_md {
 } traft_log_entry_md;
 
 /**
- * Represents a single term using a single file for entries.  
+ * Represents a single term using a single file for entries.
  * The entries file contains 3 sections:
  *    A header indicating how many entries are in the file (mmapped)
  *    An index in the form of a contiguous array of struct traft_log_entry_md
@@ -50,34 +50,33 @@ typedef struct traft_log_entry_md {
 typedef struct traft_termlog {
   traft_rwlock_t      lock;
   traft_log_header    *header;
-  traft_log_entry_md  *entries; 
+  traft_log_entry_md  *entries;
   size_t map_len; // mmap is shared between header and entries; starts at header and is map_len long
-  int entries_fd; 
+  int entries_fd;
 } traft_termlog;
 
-/**
- *   
- */
-int traft_termlog_open(traft_termlog *log, const char *basedir, uint64_t term_id);
 
 /**
  *
  */
-int traft_termlog_create(traft_termlog *log, const char *basedir, uint64_t term_id, uint32_t num_entries);
+int traft_termlog_leader_create(traft_termlog *log, const char *basedir, uint64_t term_id, uint32_t num_entries);
 
+int traft_termlog_follower_create(traft_termlog *log, const char *basedir, traft_buff *new_cfg);
+
+int traft_termlog_open(traft_termlog *log, const char *basedir, uint64_t term_id);
 /**
  * Writes the provided 
  */
 int traft_termlog_append_entry(traft_termlog *log, traft_buff *work_buff);
 
 /**
- * Populates *newest_idx with the newest_idx in this log, 
+ * Populates *newest_idx with the newest_idx in this log,
  * waiting up to max_wait_ms for a newer entry than last_idx.
- * 
+ *
  * Used by replicator to forward entries.
- * 
+ *
  * Returns 0 on success, -1 on error.
- */ 
+ */
 int traft_termlog_wait_more(traft_termlog *log, uint32_t last_idx, uint32_t *newest_idx, int max_wait_ms);
 
 /**

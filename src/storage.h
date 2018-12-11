@@ -25,6 +25,11 @@
 #include "buffers.h"
 #include "rwlock.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 typedef struct traft_peerstate {
   uint64_t  committed_term;
   uint64_t  quorum_term;
@@ -75,4 +80,8 @@ int traft_storage_send_entries(traft_storage *storage, int follower_fd,
 
 int traft_storage_apply_entries(traft_termlog *log, traft_entry_id first_entry, traft_entry_id last_entry,
                                   void *state_machine, traft_statemachine_ops ops);
+
+#ifdef __cplusplus
+}
+#endif
 
