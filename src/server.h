@@ -12,35 +12,34 @@
 #include "buffers.h"
 #include "wiretypes.h"
 #include "storage.h"
+#include "raftlet.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /** Server-side of a connected client */
-typedef traft_conn struct {
-  int       sock_fd;
-  uint8_t   client_id[32];    // client's public key
-  uint8_t   session_key[32];  // session key for encrypting new log entries
-} traft_conn;
-
-typedef traft_raftlet_private struct {
-  traft_storage     storage;
-  traft_pub_key     my_id;
-  traft_private_key my_priv_key;
-} traft_raftlet_private;
-
-typedef traft_server_private struct {
+typedef traft_server_s struct {
   struct sockaddr_in  accept_addr;
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     raftlets_guard;
-  raftlets            *raftlet_t[256];
+  raftlets            *traft_raftlet_s[256];
   int                 num_raftlets;
-} traft_server_private;
+} traft_server_s;
 
 // Starts the provided server and assigns the provided pointer to it
 int traft_start_server(uint16_t port, traft_server *ptr);
+
+// Stops the provided server and all attached raftlets.
+int traft_stop_server(traft_server ptr);
+
+// Adds the provided raftlet and starts relevant threads to serve it.
+int traft_add_raftlet(traft_server_s *server, traft_raftlet_s *raftlet);
+
+int traft_stop_raftlet(traft_server_s *server, traft_raftlet_s *raftlet);
+
+
 
 #ifdef __cplusplus
 }

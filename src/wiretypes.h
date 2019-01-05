@@ -46,12 +46,20 @@ typedef struct traft_req {
 } traft_req;
 #define RPC_REQ_LEN 64 
 
-/** */
-typedef struct traft_hello_req {
-  uint8_t       my_id[32];
-  uint8_t       padding[8];
-  traft_reqinfo info;
-} traft_hello_req;
+/** First message sent for any */
+typedef struct traft_hello {
+  uint8_t       client_id[32];        // 32
+  uint8_t       cluster_id[16];   // 48 
+  uint8_t       server_id[32];    // 80
+  uint8_t       sesssion_key[32]; // 112
+  uint8_t       mac[16];          // 128 
+} traft_hello;
+#define RPC_HELLO_LEN 80
+
+typedef struct traft_hello_resp {
+  uint64_t      status;
+  uint8_t       padding[24];
+} traft_hello_resp;
 
 /** Request sent to the leader to add entries to the cluster */
 typedef struct traft_newentry_req {

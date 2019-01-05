@@ -24,11 +24,21 @@ extern "C" {
 
 #include <stdint.h>
 #include <uuid/uuid.h>
+#include "tinyraft.h"
+#include "wiretypes.h"
 
-typedef struct raftlet {
-  fwd_client client; // Connection to leader for forwarding entries
-  
-} raftlet;
+typedef struct traft_raftlet_s {
+  uuid_t          cluster_id;
+  fwd_client      client;     // Connection to leader for forwarding entries
+  traft_storage   storage;    // entry log storage
+} traft_raftlet_s;
+
+typedef struct traft_clientinfo {
+  uint8_t remote_id[32];
+  uint8_t session_key[32];
+} traft_clientinfo;
+
+int traft_handle_req(traft_raftlet_s *raftlet, traft_remoteclient *client, traft_req *request, uint8_t *body);
 
 
 #ifdef __cplusplus

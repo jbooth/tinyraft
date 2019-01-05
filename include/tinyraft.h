@@ -71,7 +71,7 @@ typedef struct traft_statemachine_ops {
 } traft_statemachine_ops;
 
 
-/** Multiplexing server that can run multiple raftlets on a single port. */ 
+/**  Server that can run multiple raftlets on a single port. */ 
 typedef void * traft_server;
 
 typedef struct traft_server_config {
@@ -82,7 +82,7 @@ typedef struct traft_server_config {
   * Points the provided ptr at it for usage in stop() and join() functions.
   * Server thread will clean up allocated resources on death.
   */
-int traft_start_server(traft_server_config config, traft_server *ptr); 
+int traft_start_server(uint16_t port, traft_server *ptr); 
 
 /** Requests shutdown of the provided server and all attached raftlets. */
 int traft_stop_server(traft_server *server);
