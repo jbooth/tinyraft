@@ -1,6 +1,3 @@
-#pragma once
-
-#include <stdint.h>
 #include <stddef.h>
 #include <sys/uio.h>
 #include <string.h>
@@ -11,38 +8,26 @@
 #include "tinyraft.h"
 #include "buffers.h"
 #include "wiretypes.h"
-#include "storage.h"
 #include "raftlet.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define MAX_CLIENTS 32
 
-/** Server-side of a connected client */
-typedef traft_server_s struct {
-  struct sockaddr_in  accept_addr;
-  int                 accept_fd;
-  pthread_t           accept_thread;
-  pthread_mutex_t     raftlets_guard;
-  raftlets            *traft_raftlet_s[256];
-  int                 num_raftlets;
-} traft_server_s;
+// track fds so we can make sure all are closed
+typedef struct traft_client_set {
+  pthread_spinlock_t  guard;
+  int                 fds[MAX_CLIENTS];
+  traft_clientinfo    info[MAX_CLIENTS];
+  int                 count;
+} traft_client_set;
 
-// Starts the provided server and assigns the provided pointer to it
-int traft_start_server(uint16_t port, traft_server *ptr);
+typedef struct raftserver {
+  client_set  clients;
+  raftlet_s   raftlet;
+  int (*handle_request) (*traft_raftlet_s raftlet, *traft_req req, int client_fd);
+} raftserver;
 
-// Stops the provided server and all attached raftlets.
-int traft_stop_server(traft_server ptr);
+// Method to accept a new connection
+void traft_add_conn(traft_raftlet_s* raftlet, int client_fd, traft_hello *hello);
 
-// Adds the provided raftlet and starts relevant threads to serve it.
-int traft_add_raftlet(traft_server_s *server, traft_raftlet_s *raftlet);
-
-int traft_stop_raftlet(traft_server_s *server, traft_raftlet_s *raftlet);
-
-
-
-#ifdef __cplusplus
-}
-#endif
-
-
+// Server thread method, handles all connected clients
+void * traft_serve_raftlet(void *arg);

@@ -71,26 +71,26 @@ typedef struct traft_statemachine_ops {
 } traft_statemachine_ops;
 
 
-/**  Server that can run multiple raftlets on a single port. */ 
-typedef void * traft_server;
+/**  Acceptor that can run multiple raftlets on a single port. */ 
+typedef void * traft_accepter;
 
 typedef struct traft_server_config {
 } traft_server_config;
 
 /**
-  * Allocates and starts a server listening to the provided address. 
+  * Allocates and starts a accepter listening to the provided address. 
   * Points the provided ptr at it for usage in stop() and join() functions.
   * Server thread will clean up allocated resources on death.
   */
-int traft_start_server(uint16_t port, traft_server *ptr); 
+int traft_start_acceptor(uint16_t port, traft_accepter *ptr); 
 
-/** Requests shutdown of the provided server and all attached raftlets. */
-int traft_stop_server(traft_server *server);
+/** Requests shutdown of the provided acceptor and all attached raftlets. */
+int traft_stop_accepter(traft_accepter *accepter);
 
-/** Blocks until a server has actually shut down and released all resources. */
-int traft_join_server(traft_server *server);
+/** Blocks until a accepter has actually shut down and released all resources. */
+int traft_join_accepter(traft_accepter *accepter);
 
-typedef uint8_t traft_pub_key[32]; // crypto_box_curve25519xchacha20poly1305_PUBLICKEYBYTES
+typedef uint8_t traft_pub_key[32];    // crypto_box_curve25519xchacha20poly1305_PUBLICKEYBYTES
 typedef uint8_t traft_secret_key[32]; // crypto_box_curve25519xchacha20poly1305_SECRETKEYBYTES
 
 #define TRAFT_MAX_PEERS 16
@@ -146,15 +146,14 @@ typedef struct traft_raftlet {
 #define TINYRAFT_MAX_PEERS 15
 
 /** 
-  * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
+  * Starts a raftlet serving the provided, initialized storagepath on the provided accepter.  
   * Allocates all resources necessary to process entries and starts threads before returning.
   * 
-  * 
   */
-int traft_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, void *state_machine, traft_raftlet *raftlet);
+int traft_run_raftlet(const char *storagepath, traft_accepter accepter, traft_statemachine_ops ops, void *state_machine, traft_raftlet *raftlet);
 
 /**
-  * Requests that a server stop running.  It will clean up all resources associated before threads terminate.
+  * Requests that a raftlet stop running.  It will clean up all resources and terminate threads before returning.
   */
 int traft_stop_raftlet(traft_raftlet *raftlet);
 

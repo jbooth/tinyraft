@@ -12,38 +12,38 @@
 
 #define MAX_CLIENTS 32
 
-// track fds so we can make sure all are closed
-struct client_set {
-  int              fds[MAX_CLIENTS];
-  traft_clientinfo info[MAX_CLIENTS];
-  int count;
-};
-
 // Adds the client or returns -1 if we're already full
-static int add_client(struct client_set *c, int fd, traft_clientinfo info) {
+static int add_client(client_set *c, int fd, traft_clientinfo info) {
+  pthread_spin_lock(&c->guard);
   if (c->count == MAX_CLIENTS) {
+    pthread_spin_unlock(&c->guard);
     return -1;
   }
   c->fds[c->count] = fd;
   c->info[c->count] = info;
   c->count++;
+  pthread_spin_unlock(&c->guard);
   return 0;
 }
 
-static int get_info(struct client_set *c, int fd, traft_clientinfo *info) {
+static int get_info(client_set *c, int fd, traft_clientinfo *info) {
+  pthread_spin_lock(&c->guard);
   for (int i = 0 ; i < c->count ; i++) {
     if (c->fds[i] == fd) {
       memcpy(info, c->info[i], sizeof(traft_clientinfo));
+      pthread_spin_unlock(&c->guard);
       return 0;
     }
   }
   // fd not found
+  pthread_spin_unlock(&c->guard);
   return -1;
 }
 
-static void kill_client(struct client_set *c, int fd) {
-  if (fd) { close(fd); }
+static void kill_client(client_set *c, int fd) {
+  if (fd < 1) { return; }
 
+  pthread_spin_lock(&c->guard);
   // find fd_idx in the array
   int fd_idx = -1;
   for (int i = 0 ; i < c->count ; i++) {
@@ -60,17 +60,40 @@ static void kill_client(struct client_set *c, int fd) {
     c->fds[last_idx] = -1;
     fds->count--;
   }
+  pthread_spin_unlock(&c->guard);
+
+  close(fd);
 }
 
-static void close_all(struct client_set *c) {
-  for (int i = 0 ; i < c->count ; i++) {
-    int fd = c->fds[i];
-    if (fd) {
-      close(fd);
-    }
+static void close_all(client_set *c) {
+  // copy to temp buffer with lock held
+  pthread_spin_lock(&c->guard);
+  int fds[MAX_CLIENTS];
+  int num_fds = c->count;
+  for (int i = 0 ; i < c->count; i++) {
+    fds[i] = c->fds[i];
     c->fds[i] = -1;
   }
   c->count = 0;
+  pthread_spin_unlock(&c->guard);
+
+  // close all
+  for (int i = 0 ; i < num_fds ; i++) {
+    if (fds[i]) { close(fds[i]); }
+  }
+}
+
+// Sets up the provided array of pollfds and returns number of fds to poll for
+static int prepare_poll(client_set *c, struct pollfd *fds) {
+  memset(fds, 0, sizeof(pollfd) * MAX_CLIENTS);
+  pthread_spin_lock(&c->guard);
+  for (int i = 0 ; i < c->count ; i++) {
+    fds[i].fd = c->fds[i];
+    fds[i].events = POLLIN;
+  }
+  int count = c->count;
+  pthread_spin_unlock(&c->guard);
+  return count;
 }
 
 // Reads all.  Returns 0 on success, -1 on failure.
@@ -86,67 +109,35 @@ static int read_all(int fd, uint8_t *buf, size_t count) {
   return 0;
 }
 
-static int read_hello(int fd, traft_hello *msg, uint8_t *private_key) {
-  if (read_all(fd, (uint8_t*) msg, RPC_HELLO_LEN) == -1) {
-    // read err
-    return -1;
+void raftlet_add_conn(raftlet_server* server, int client_fd, traft_hello *hello) {
+  // decrypt session key
+  char  session_key[32];
+  if (crypto_box_curve25519xchacha20poly1305_open_detached(
+    &session_key, &hello->session_key, &hello->mac, 32, &hello->nonce, &hello->client_id, &raftlet->private_key) == -1) {
+    // decrypt error, tell client they're not auth'd and hangup
   }
-  if (crypto_box_open_detached(&msg->session_key, 
+  // add to client_set
+  traft_clientinfo clientinfo;
+  memcpy(&clientinfo.remote_id, &hello->client_id, 32);
+  memcpy(&clientinfo.session_key, &hello->session_key, 32);
+  add_client(&server->clients, client_fd, clientinfo);
 }
 
-void * traft_serve(void *arg) {
-  traft_server_s *server = (traft_server_s*) arg;
-  
-  // accept conns and delegate to raftlets
-  struct sockaddr new_conn_addr;
-  socklen_t new_conn_addrlen;
-  traft_hello hello;;  // msg header + body
+void * traft_serve_raftlet(void *arg) {
+  raftlet_server *server = (raftlet_server*) arg;
+  struct pollfd poll_fds[MAX_CLIENTS];
   while (1) {
-    int client_fd = accept(server->accept_fd, &new_conn_addr, &new_conn_addrlen);
-    if (client_fd == -1) {
-      // accept socket is bad, die somehow
+    int nfds = prepare_poll(&server->clients, &poll_fds);
+    if (poll(&poll_fds, nfds, 100) == -1) {
+      // poll error
     }
-    // read hello
-    if (read_all(client_fd, (uint8_t*) &hello, RPC_HELLO_LEN) == -1) {
-      // kill conn
+    for (int i = 0 ; i < nfds ; i++) {
+      if (poll_fds[i].revents & (POLLHUP | POLLNVAL)) {
+        // kill client
+      }
+      if (poll_fds[i].revents & POLLIN) {
+      }
     }
-    // locate raftlet for this cluster_id
-    
-  
-    // authenticate, confirm we have raftlet
-    // write hello_resp
-    // assign to raftlet 
   }
-}
-
-int traft_start_server(uint16_t port, traft_server *ptr) {
-  // allocate server
-  traft_server *server = malloc(sizeof(traft_server_s));
-  memset(server, 0, sizeof(traft_server_s));
-  server->bind_port = cfg->port;
-  pthread_mutex_init(&server->raflets_guard);
-
-  // bind socket to all IPv4 incoming traffic for port
-  server->accept_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (server->accept_fd < 0) {
-    free(server);
-    return -1;
-  }
-
-  memset(&server->accept_addr, 0, sizeof(struct sockaddr_in));
-  server->accept_addr.sin_port = port;
-  server->accept_addr.sin_addr = INADDR_ANY;
-  if (bind(server->accept_fd, &server->accept_addr, sizeof(struct sockaddr_in) == -1) {
-    free(server);
-    return -1;
-  }
-
-  // start thread to accept conns
-  if (pthread_create(&server->accept_thread, NULL, &traft_serve, server) == -1) {
-    free(server);
-    return -1;
-  }
-  *ptr = server;
-  return 0;
 }
 

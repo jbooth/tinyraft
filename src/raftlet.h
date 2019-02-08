@@ -29,8 +29,9 @@ extern "C" {
 
 typedef struct traft_raftlet_s {
   uuid_t          cluster_id;
-  fwd_client      client;     // Connection to leader for forwarding entries
-  traft_storage   storage;    // entry log storage
+  uint8_t         raftlet_id[32];  // Raftlet public key
+  uint8_t         private_key[32]; // Raftlet private key
+  traft_storage   storage;         // entry log storage
 } traft_raftlet_s;
 
 typedef struct traft_clientinfo {

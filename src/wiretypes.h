@@ -48,13 +48,14 @@ typedef struct traft_req {
 
 /** First message sent for any */
 typedef struct traft_hello {
-  uint8_t       client_id[32];        // 32
-  uint8_t       cluster_id[16];   // 48 
-  uint8_t       server_id[32];    // 80
-  uint8_t       sesssion_key[32]; // 112
-  uint8_t       mac[16];          // 128 
+  uint8_t       client_id[32];    // 32  
+  uint8_t       cluster_id[16];   // 48
+  uint8_t       server_id[32];    // 80    
+  uint8_t       nonce[24];        // 104 crypto_box_NONCEBYTES
+  uint8_t       session_key[32];  // 136 
+  uint8_t       mac[16];          // 152 
 } traft_hello;
-#define RPC_HELLO_LEN 80
+#define RPC_HELLO_LEN 152
 
 typedef struct traft_hello_resp {
   uint64_t      status;
