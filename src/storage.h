@@ -19,7 +19,6 @@
 
 #include <pthread.h>
 #include <stdint.h>
-#include "tinyraft.h"
 #include "wiretypes.h"
 #include "termlog.h"
 #include "buffers.h"
@@ -73,7 +72,6 @@ int traft_storage_wait_more_local(traft_storage *storage, traft_entry_id prev_ma
 /** Blocks until we've reached quorum for more entries, or until max_wait_ms has elapsed */
 int traft_storage_wait_more_quorum(traft_storage *storage, traft_entry_id prev_quorum, 
                                    traft_entry_id *new_quorum, int max_wait_ms);
-
 int traft_storage_send_entries(traft_storage *storage, int follower_fd, 
                                traft_entry_id first_entry, traft_entry_id last_entry);
 

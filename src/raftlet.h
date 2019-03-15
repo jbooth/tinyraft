@@ -39,7 +39,7 @@ typedef struct traft_clientinfo {
   uint8_t session_key[32];
 } traft_clientinfo;
 
-int traft_handle_req(traft_raftlet_s *raftlet, traft_remoteclient *client, traft_req *request, uint8_t *body);
+int traft_handle_req(traft_raftlet_s *raftlet, traft_clientinfo *client, traft_req *request, uint8_t *body);
 
 
 #ifdef __cplusplus

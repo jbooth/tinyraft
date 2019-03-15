@@ -20,10 +20,11 @@ typedef struct traft_client_set {
   int                 count;
 } traft_client_set;
 
-typedef struct raftserver {
-  client_set  clients;
-  raftlet_s   raftlet;
-  int (*handle_request) (*traft_raftlet_s raftlet, *traft_req req, int client_fd);
+// Represents the server for a single raftlet
+typedef struct traft_servlet_s {
+  traft_client_set  clients;
+  traft_raftlet_s   raftlet;
+  int (*handle_request) (traft_raftlet_s *raftlet, traft_req *req, int client_fd);
 } raftserver;
 
 // Method to accept a new connection

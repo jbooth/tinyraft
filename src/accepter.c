@@ -4,11 +4,13 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <linux/in.h>
 
-#include "tinyraft.h"
+#include "accepter.h"
 #include "buffers.h"
 #include "wiretypes.h"
 #include "storage.h"
+#include "raftlet.h"
 
 #define MAX_CLIENTS 32
 
@@ -33,7 +35,7 @@ static int add_client(struct client_set *c, int fd, traft_clientinfo info) {
 static int get_info(struct client_set *c, int fd, traft_clientinfo *info) {
   for (int i = 0 ; i < c->count ; i++) {
     if (c->fds[i] == fd) {
-      memcpy(info, c->info[i], sizeof(traft_clientinfo));
+      *info = c->info[i];
       return 0;
     }
   }
@@ -58,7 +60,7 @@ static void kill_client(struct client_set *c, int fd) {
     c->fds[fd_idx] = c->fds[last_idx];
     c->info[fd_idx] = c->info[last_idx];
     c->fds[last_idx] = -1;
-    fds->count--;
+    c->count--;
   }
 }
 
@@ -91,8 +93,8 @@ static void raftlet_add_conn(traft_raftlet_s* raftlet, int client_fd, traft_hell
   // add to client_set
 }
 
-static void * traft_acceptor(void *arg) {
-  traft_server_s *server = (traft_server_s*) arg;
+static void * traft_do_accept(void *arg) {
+  traft_accepter_s *server = (traft_accepter_s*) arg;
   
   // accept conns and delegate to raftlets
   struct sockaddr new_conn_addr;
@@ -114,10 +116,10 @@ static void * traft_acceptor(void *arg) {
     }
     // locate raftlet for this cluster_id
     int found_raftlet = 0;
-    for (int i = 0; i < server->num_raftlets, i++) {
-      traft_raftlet_s *raftlet = &server->raflets[i];
-      if (memcmp(hello->cluster_id, raftlet->cluster_id, 16) == 0 
-          && memcmp(hello->server_id, raftlet->raftlet_id, 32) == 0) {
+    for (int i = 0; i < server->num_raftlets; i++) {
+      traft_raftlet_s *raftlet = &server->raftlets[i];
+      if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
+          && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
         raftlet_add_conn(raftlet, client_fd, &hello);  
         found_raftlet = 1;
       }
@@ -127,12 +129,11 @@ static void * traft_acceptor(void *arg) {
   }
 }
 
-int traft_start_server(uint16_t port, traft_server *ptr) {
+int traft_start_server(uint16_t port, void **ptr) {
   // allocate server
-  traft_server *server = malloc(sizeof(traft_server_s));
-  memset(server, 0, sizeof(traft_server_s));
-  server->bind_port = cfg->port;
-  pthread_mutex_init(&server->raflets_guard);
+  traft_accepter_s *server = malloc(sizeof(traft_accepter));
+  memset(server, 0, sizeof(traft_accepter_s));
+  pthread_mutex_init(&server->raftlets_guard, NULL);
 
   // bind socket to all IPv4 incoming traffic for port
   server->accept_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -143,18 +144,17 @@ int traft_start_server(uint16_t port, traft_server *ptr) {
 
   memset(&server->accept_addr, 0, sizeof(struct sockaddr_in));
   server->accept_addr.sin_port = port;
-  server->accept_addr.sin_addr = INADDR_ANY;
+  server->accept_addr.sin_addr.s_addr = INADDR_ANY;
   if (bind(server->accept_fd, &server->accept_addr, sizeof(struct sockaddr_in) == -1)) {
     free(server);
     return -1;
   }
 
   // start thread to accept conns
-  if (pthread_create(&server->accept_thread, NULL, &traft_serve, server) == -1) {
+  if (pthread_create(&server->accept_thread, NULL, &traft_do_accept, server) == -1) {
     free(server);
     return -1;
   }
   *ptr = server;
   return 0;
 }
-
