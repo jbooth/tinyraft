@@ -30,7 +30,7 @@ void traft_buff_free(traft_buff *b) {
 // Writes all.  Returns 0 on success, -1 on failure.
 static int write_all(int fd, uint8_t *buf, size_t count) {
   while (count) {
-    printf("writing %d\n", count);
+    printf("writing %zd\n", count);
     ssize_t w = write(fd, buf, count);
     if (w == -1) {
       return -1;
@@ -174,9 +174,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
   printf("TRANSCODE \n\n");
   // Get view of client header, calculate nonce
   traft_newentry_req *client_header = (traft_newentry_req*) b->buff;
-  printf("header addr %d\n", client_header);
   uint8_t *body_section = b->buff + RPC_REQ_LEN;
-  printf("body addr %d\n", body_section);
   nonceval client_nonce;
   nonce_for_client(client_header->client_idx, client_header->client_id, &client_nonce);
   uint32_t msg_body_len = client_header->info.body_len;
@@ -253,7 +251,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
 	}
   printf("recrypted\n");
   b->msg_size = RPC_REQ_LEN + leader_header->info.body_len;
-  printf("transcoded msg size %d\n", b->msg_size);
+  printf("transcoded msg size %zd\n", b->msg_size);
 
   sodium_bin2hex(hex, 512, leader_nonce, 12);
   printf("Nonce hex %s\n", hex);
@@ -406,7 +404,7 @@ int traft_deser_termconfig(traft_buff *buff, traft_termconfig *cfg, const uint8_
   // copy structs
   memcpy(&cfg->cluster_cfg, &bin_cfg_view->cluster_cfg,  TRAFT_CLUSTER_CONFIG_SIZE);
   cfg->term_id = bin_cfg_view->term_id;
-  printf("term_id %d", bin_cfg_view->term_id);
+  printf("term_id %zd", bin_cfg_view->term_id);
   memcpy(cfg->leader_id, bin_cfg_view->leader_id, 32);
   // find our key
   nonceval termnonce;

@@ -117,7 +117,7 @@ static void * traft_do_accept(void *arg) {
     // locate raftlet for this cluster_id
     int found_raftlet = 0;
     for (int i = 0; i < server->num_raftlets; i++) {
-      traft_raftlet_s *raftlet = &server->raftlets[i];
+      traft_raftlet_s *raftlet = server->raftlets[i];
       if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
           && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
         raftlet_add_conn(raftlet, client_fd, &hello);  
@@ -133,7 +133,7 @@ int traft_start_server(uint16_t port, void **ptr) {
   // allocate server
   traft_accepter_s *server = malloc(sizeof(traft_accepter));
   memset(server, 0, sizeof(traft_accepter_s));
-  pthread_mutex_init(&server->raftlets_guard, NULL);
+  pthread_mutex_init(&server->servlets_guard, NULL);
 
   // bind socket to all IPv4 incoming traffic for port
   server->accept_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -145,7 +145,7 @@ int traft_start_server(uint16_t port, void **ptr) {
   memset(&server->accept_addr, 0, sizeof(struct sockaddr_in));
   server->accept_addr.sin_port = port;
   server->accept_addr.sin_addr.s_addr = INADDR_ANY;
-  if (bind(server->accept_fd, &server->accept_addr, sizeof(struct sockaddr_in) == -1)) {
+  if (bind(server->accept_fd, (struct sockaddr*)&server->accept_addr.sin_addr, sizeof(struct sockaddr_in) == -1)) {
     free(server);
     return -1;
   }

@@ -26,6 +26,7 @@ extern "C" {
 #include <uuid/uuid.h>
 #include "tinyraft.h"
 #include "wiretypes.h"
+#include "storage.h"
 
 typedef struct traft_raftlet_s {
   uuid_t          cluster_id;

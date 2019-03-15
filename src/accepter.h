@@ -12,6 +12,7 @@
 #include "buffers.h"
 #include "wiretypes.h"
 #include "raftlet.h"
+#include "server.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +23,7 @@ typedef struct traft_accepter_s {
   struct sockaddr_in  accept_addr;
   int                 accept_fd;
   pthread_t           accept_thread;
-  pthread_mutex_t     raftlets_guard;
+  pthread_mutex_t     servlets_guard;
   traft_raftlet_s     *raftlets[256];
   int                 num_raftlets;
 } traft_accepter_s;
