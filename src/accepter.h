@@ -24,7 +24,7 @@ typedef struct traft_accepter_s {
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     servlets_guard;
-  traft_raftlet_s     *raftlets[256];
+  traft_servlet_s     servlets[256];
   int                 num_raftlets;
 } traft_accepter_s;
 

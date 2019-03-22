@@ -35,7 +35,7 @@ typedef struct traft_servlet_s {
 } traft_servlet_s;
 
 // Method to accept a new connection
-void traft_add_conn(traft_raftlet_s* raftlet, int client_fd, traft_hello *hello);
+void traft_add_conn(traft_servlet_s* servlet, int client_fd, traft_hello *hello);
 
 // Server thread method, handles all connected clients
 void * traft_serve_raftlet(void *arg);

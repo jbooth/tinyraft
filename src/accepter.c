@@ -11,6 +11,7 @@
 #include "wiretypes.h"
 #include "storage.h"
 #include "raftlet.h"
+#include "server.h"
 
 #define MAX_CLIENTS 32
 
@@ -117,14 +118,15 @@ static void * traft_do_accept(void *arg) {
     // locate raftlet for this cluster_id
     int found_raftlet = 0;
     for (int i = 0; i < server->num_raftlets; i++) {
-      traft_raftlet_s *raftlet = server->raftlets[i];
+      traft_raftlet_s *raftlet = &server->servlets[i].raftlet;
       if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
           && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
-        raftlet_add_conn(raftlet, client_fd, &hello);  
+        raftlet_add_conn(raftlet, client_fd, &hello);
         found_raftlet = 1;
       }
     }
     // No raftlet for this ID, kill..  should we send an error back to client?
+    // TODO log
     if (! found_raftlet) { close(client_fd); }
   }
 }

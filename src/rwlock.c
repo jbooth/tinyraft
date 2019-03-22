@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include "rwlock.h"
 
-int traft_wrlock_init(traft_rwlock_t *rwlock) {
+int traft_rwlock_init(traft_rwlock_t *rwlock) {
   rwlock->writer = 0;
   rwlock->num_readers = 0;
   rwlock->num_readers = 0;
@@ -12,7 +12,7 @@ int traft_wrlock_init(traft_rwlock_t *rwlock) {
   return pthread_cond_init(&rwlock->c, NULL);
 }
 
-int traft_wrlock_destroy(traft_rwlock_t *rwlock) {
+int traft_rwlock_destroy(traft_rwlock_t *rwlock) {
   int err = pthread_mutex_destroy(&rwlock->m);
   if (err != 0) { return err; }
   return pthread_cond_destroy(&rwlock->c);

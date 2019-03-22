@@ -123,8 +123,6 @@ typedef struct traft_raftlet_identity {
   traft_secret_key  secret_key; // 64
 } traft_raftlet_identity;
 
-#define TRAFT_PEER_INFO_SIZE 296
-
 #define TRAFT_DEFAULT_PORT 1103
 /**
  * Generates keys and default raftlet_config values for peer_count peers, storing them in *cfg.
@@ -136,19 +134,14 @@ void gen_cluster(traft_cluster_config *cfg, int peer_count, char *hostnames, uin
 
 typedef struct traft_raftlet {
   uuid_t                      cluster_id;
-  traft_statemachine_ops   ops;
+  traft_statemachine_ops      ops;
   void                        *state_machine;
   void                        *server_state;
 } traft_raftlet;
 
-
-
-#define TINYRAFT_MAX_PEERS 15
-
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided accepter.  
   * Allocates all resources necessary to process entries and starts threads before returning.
-  * 
   */
 int traft_run_raftlet(const char *storagepath, traft_accepter accepter, traft_statemachine_ops ops, void *state_machine, traft_raftlet *raftlet);
 
