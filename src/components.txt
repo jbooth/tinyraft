@@ -1,3 +1,11 @@
+TODO
+factor buffers under wiretypes.h
+server owns buffer
+raftlet owns list of termlogs, passed in buffer
+
+
+
+
 
 SERVER
 initiates or applies entries it's receiving

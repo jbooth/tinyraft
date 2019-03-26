@@ -46,7 +46,7 @@ typedef struct traft_req {
 } traft_req;
 #define RPC_REQ_LEN 64 
 
-/** First message sent for any */
+/** First message sent for any session. */
 typedef struct traft_hello {
   uint8_t       client_id[32];    // 32  
   uint8_t       cluster_id[16];   // 48
@@ -140,19 +140,9 @@ typedef struct append_entries_resp {
   uint8_t  padding[8];        // 32
 } append_entries_resp;
 
-/** Shared resp info, always the last 8 of the 32 response bytes */
-typedef struct resp_info {
-  uint32_t reqno;
-  uint32_t status;
-} resp_info;
-
-/** Generic response type, cast to this to call functions below */
-typedef struct generic_resp {
-  union {
-    append_entries_resp append_entries;
-  } message;
-  resp_info   info;
-} generic_resp;
+typedef struct traft_resp {
+  uint8_t padding[32];
+} traft_resp;
 
 
 #ifdef __cplusplus

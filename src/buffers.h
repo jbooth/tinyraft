@@ -69,6 +69,7 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
  */
 int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termkey);
 
+int traft_write_resp(traft_resp *resp, int fd);
 
 typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
 

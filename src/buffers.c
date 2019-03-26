@@ -24,7 +24,10 @@ int traft_buff_alloc(traft_buff *b, size_t max_msg_size) {
 }
 
 void traft_buff_free(traft_buff *b) {
-  sodium_free(b->buff);
+  if (b->buff != NULL) {
+    sodium_free(b->buff);
+  }
+  b->buff = NULL;
 }
 
 // Writes all.  Returns 0 on success, -1 on failure.
@@ -327,6 +330,10 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
   printf("Info section %s\n", hex);
 
   return 0;
+}
+
+int traft_write_resp(traft_resp *resp, int fd) {
+  return write_all(fd, (uint8_t*)resp, RPC_RESP_LEN);
 }
 
 // Used to encode a termkey for each peer, their eyes only
