@@ -150,7 +150,7 @@ static void *servlet_run(void *arg) {
     int num_poll_fds = servlet_prepare_poll(&servlet->clients, pollfds);
     err = poll(pollfds, num_poll_fds, polltimeout_ms);
     if (err == -1) { 
-      goto DIE;
+      goto SERVLET_DIE;
     }
     for (int i = 0 ; i < num_poll_fds ; i++) {
       if (pollfds[i].revents & (POLLHUP | POLLERR)) {
@@ -163,14 +163,14 @@ static void *servlet_run(void *arg) {
         traft_buff_readreq(&req_buff, pollfds[i].fd);
         int err = servlet->handle_request(&servlet->raftlet, &req_buff, &resp);
         if (err == -1) {
-          goto DIE;
+          goto SERVLET_DIE;
         }
         // TODO timeout
         traft_write_resp(&resp, pollfds[i].fd);
       }
     }
   }
-  DIE:
+  SERVLET_DIE:
   traft_buff_free(&req_buff);
   servlet_close_all(&servlet->clients);
 }
@@ -189,19 +189,33 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
   servlet_add_client(&server->clients, client_fd, clientinfo);
 }
 
+#define MAX_SERVLETS 256
+
 /** Structure containing our accepter socket and all registered raftlets */
 typedef struct traft_accepter_s {
-  struct sockaddr_in  accept_addr;
+  struct sockaddr_storage     accept_addr;
+  socklen_t                   accept_addrlen;
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     servlets_guard;
-  traft_servlet_s     servlets[256];
+  traft_servlet_s     servlets[MAX_SERVLETS];
   int                 num_raftlets;
 } traft_accepter_s;
 
+static int bind_accepter_sock(int accept_fd, struct sockaddr *addr, socklen_t addrlen) {
+  int err = bind(accept_fd, addr, addrlen);
+  if (err < 0) { return err; } 
+  return listen(accept_fd, 10);
+}
+
 static void * traft_do_accept(void *arg) {
   traft_accepter_s *server = (traft_accepter_s*) arg;
-  
+  // set up server
+  memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
+  pthread_mutex_init(&server->servlets_guard);
+  server->accept_fd = socket(AF_INET, SOCK_STREAM, SOCK_CLOEXEC);
+  int bind_err = bind_accepter_sock(server->accept_fd, server->accept_addr, server->accept_addrlen);
+
   // accept conns and delegate to raftlets
   struct sockaddr new_conn_addr;
   socklen_t new_conn_addrlen;
@@ -210,7 +224,7 @@ static void * traft_do_accept(void *arg) {
     int client_fd = accept(server->accept_fd, &new_conn_addr, &new_conn_addrlen);
     if (client_fd == -1) {
       // TODO detect if server socket is bad and kill everything
-      continue;
+      goto ACCEPTER_DIE;
     }
     // read hello message
     // TODO this should have a somewhat aggressive timeout, these connections aren't authenticated yet
@@ -234,12 +248,18 @@ static void * traft_do_accept(void *arg) {
     // TODO log
     if (! found_raftlet) { close(client_fd); }
   }
+  ACCEPTER_DIE:
+  close(server->accept_fd);
+  // TODO close all servlets/raftlets
+  // TODO log errno
+  free(server);
 }
 
 /** PUBLIC API METHODS */
 
 int traft_start_server(uint16_t port, traft_server *ptr) {
   // init
+  traft_accepter_s *server = malloc(sizeof(traft_accepter_s));
   // start accept thread
   return 0;
 }
