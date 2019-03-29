@@ -193,8 +193,7 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
 
 /** Structure containing our accepter socket and all registered raftlets */
 typedef struct traft_accepter_s {
-  struct sockaddr_storage     accept_addr;
-  socklen_t                   accept_addrlen;
+  uint16_t            accept_port;
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     servlets_guard;
@@ -202,20 +201,29 @@ typedef struct traft_accepter_s {
   int                 num_raftlets;
 } traft_accepter_s;
 
-static int bind_accepter_sock(int accept_fd, struct sockaddr *addr, socklen_t addrlen) {
-  int err = bind(accept_fd, addr, addrlen);
-  if (err < 0) { return err; } 
-  return listen(accept_fd, 10);
+static int bind_accepter_sock(traft_accepter_s *server) {
+  // TODO either bind to specific addr or bind 2 FDs for inet4 and inet6
+  server->accept_fd = socket(AF_INET, SOCK_STREAM, SOCK_CLOEXEC);
+  if (server->accept_fd == -1) { return -1; }
+  struct sockaddr_in in_any;
+  in_any.sin_family = AF_INET;
+  in_any.sin_addr.s_addr = INADDR_ANY;
+  in_any.sin_port = server->accept_port;
+  int err = bind(server->accept_fd, &in_any, sizeof(struct sockaddr_in));
+  if (err == -1) { return -1; } 
+  return listen(server->accept_fd, 10);
 }
 
 static void * traft_do_accept(void *arg) {
   traft_accepter_s *server = (traft_accepter_s*) arg;
   // set up server
+  int bind_err = bind_accepter_sock(server);
+  server->accept_thread = pthread_self();
+  if (bind_err == -1) { goto ACCEPTER_DIE; }
+  pthread_mutex_init(&server->servlets_guard, NULL);
   memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
-  pthread_mutex_init(&server->servlets_guard);
   server->accept_fd = socket(AF_INET, SOCK_STREAM, SOCK_CLOEXEC);
-  int bind_err = bind_accepter_sock(server->accept_fd, server->accept_addr, server->accept_addrlen);
-
+  
   // accept conns and delegate to raftlets
   struct sockaddr new_conn_addr;
   socklen_t new_conn_addrlen;
