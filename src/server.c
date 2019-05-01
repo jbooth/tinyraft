@@ -16,7 +16,6 @@
  * 1)  A servlet_s, which manages a single raftlet and all connections which have dialed through to it.
  * 2)  A server_s, which binds to a port, listens for new connections and authenticates them with registered raftlets.
  */
-
 #define MAX_CLIENTS 64
 
 // Tracks the set of clients being listened to by a server
@@ -191,15 +190,76 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
 
 #define MAX_SERVLETS 256
 
+typedef enum accepter_state {
+  INIT, RUN, STOP_REQUESTED, DEAD  
+} accepter_state;
 /** Structure containing our accepter socket and all registered raftlets */
 typedef struct traft_accepter_s {
   uint16_t            accept_port;
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     servlets_guard;
+  pthread_cond_t      state_change;
+  accepter_state      state;
+
   traft_servlet_s     servlets[MAX_SERVLETS];
   int                 num_raftlets;
 } traft_accepter_s;
+
+static void wait_state(traft_accepter_s *accepter, accepter_state state) {
+  pthread_mutex_lock(&accepter->servlets_guard);
+  while (accepter->state != state) {
+    pthread_cond_wait(&accepter->state_change, &accepter->servlets_guard);
+  }
+  pthread_mutex_unlock(&accepter->servlets_guard);
+}
+
+static void * traft_do_accept(void *arg) {
+  traft_accepter_s *server = (traft_accepter_s*) arg;
+  // set up server
+  pthread_mutex_lock(&server->servlets_guard);
+
+
+  pthread_mutex_unlock(&server->servlets_guard);
+  // accept conns and delegate to raftlets
+  struct sockaddr new_conn_addr;
+  socklen_t new_conn_addrlen;
+  traft_hello hello;;  // msg header + body
+  while (1) {
+    int client_fd = accept(server->accept_fd, &new_conn_addr, &new_conn_addrlen);
+    if (client_fd == -1) {
+      // TODO detect if this is recoverable
+      goto ACCEPTER_DIE;
+    }
+    // read hello message
+    // TODO this should have a somewhat aggressive timeout, these connections aren't authenticated yet
+    // TODO TODO DDOS vulnerability
+    if (read_all(client_fd, (uint8_t*) &hello, RPC_HELLO_LEN) == -1) {
+      // kill conn
+      close(client_fd);
+      continue;
+    }
+    // locate raftlet for this cluster_id
+    traft_raftlet_s *found_raftlet = NULL;
+    for (int i = 0; i < server->num_raftlets; i++) {
+      traft_raftlet_s *raftlet = &server->servlets[i].raftlet;
+      if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
+          && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
+        found_raftlet = raftlet;
+      }
+    }
+    // No raftlet for this ID, kill..  should we send an error back to client?
+    // TODO log
+    if (found_raftlet == NULL) { close(client_fd); continue; }
+    // process raftlet
+    servlet_add_conn(found_raftlet, client_fd, &hello);
+  }
+  ACCEPTER_DIE:
+  close(server->accept_fd);
+  // TODO close all servlets/raftlets
+  // TODO log errno
+  free(server);
+}
 
 static int bind_accepter_sock(traft_accepter_s *server) {
   // TODO either bind to specific addr or bind 2 FDs for inet4 and inet6
@@ -214,62 +274,30 @@ static int bind_accepter_sock(traft_accepter_s *server) {
   return listen(server->accept_fd, 10);
 }
 
-static void * traft_do_accept(void *arg) {
-  traft_accepter_s *server = (traft_accepter_s*) arg;
-  // set up server
-  int bind_err = bind_accepter_sock(server);
-  server->accept_thread = pthread_self();
-  if (bind_err == -1) { goto ACCEPTER_DIE; }
-  pthread_mutex_init(&server->servlets_guard, NULL);
-  memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
-  server->accept_fd = socket(AF_INET, SOCK_STREAM, SOCK_CLOEXEC);
-  
-  // accept conns and delegate to raftlets
-  struct sockaddr new_conn_addr;
-  socklen_t new_conn_addrlen;
-  traft_hello hello;;  // msg header + body
-  while (1) {
-    int client_fd = accept(server->accept_fd, &new_conn_addr, &new_conn_addrlen);
-    if (client_fd == -1) {
-      // TODO detect if server socket is bad and kill everything
-      goto ACCEPTER_DIE;
-    }
-    // read hello message
-    // TODO this should have a somewhat aggressive timeout, these connections aren't authenticated yet
-    // TODO TODO DDOS vulnerability
-    if (read_all(client_fd, (uint8_t*) &hello, RPC_HELLO_LEN) == -1) {
-      // kill conn
-      close(client_fd);
-      continue;
-    }
-    // locate raftlet for this cluster_id
-    int found_raftlet = 0;
-    for (int i = 0; i < server->num_raftlets; i++) {
-      traft_raftlet_s *raftlet = &server->servlets[i].raftlet;
-      if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
-          && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
-        found_raftlet = 1;
-        servlet_add_conn(raftlet, client_fd, &hello);
-      }
-    }
-    // No raftlet for this ID, kill..  should we send an error back to client?
-    // TODO log
-    if (! found_raftlet) { close(client_fd); }
-  }
-  ACCEPTER_DIE:
-  close(server->accept_fd);
-  // TODO close all servlets/raftlets
-  // TODO log errno
-  free(server);
-}
-
 /** PUBLIC API METHODS */
-
 int traft_start_server(uint16_t port, traft_server *ptr) {
-  // init
   traft_accepter_s *server = malloc(sizeof(traft_accepter_s));
-  // start accept thread
+  if (server == NULL) {
+    return -1;
+  }
+  server->accept_port = port;
+  pthread_mutex_init(&server->servlets_guard, NULL);
+  pthread_cond_init(&server->state_change, NULL);
+  server->state = INIT;
+  int err = bind_accepter_sock(server);
+  if (err == -1) { goto START_SERVER_ERR; }
+  memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
+  err = pthread_create(&server->accept_thread, NULL, &traft_do_accept, server);
+  if (err != 0) { goto START_SERVER_ERR; }
+  wait_state(server, RUN);
+  // wait until serving
+  *ptr = server;
   return 0;
+
+  START_SERVER_ERR:
+  free(server);
+  return -1;
+
 }
 
 /** Requests shutdown of the provided acceptor and all attached raftlets. */
