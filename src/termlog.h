@@ -24,6 +24,9 @@
 #include "buffers.h"
 #include "rwlock.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 // Log header, contains term-wide information.
 typedef struct traft_log_header {
   uint64_t term;                  // 8  Term ID
@@ -87,5 +90,8 @@ int traft_termlog_send_entries(traft_termlog *log, int follower_fd, int32_t firs
 /**
  * Applies the provided entry IDs to the provided state machine.
  */
-int traft_termlog_apply_entries(traft_termlog *log, int32_t first_idx, int32_t last_idx,
-                                  void *state_machine, traft_statemachine_ops ops);
+int traft_termlog_apply_entries(traft_termlog *log, int32_t first_idx, int32_t last_idx, void *state_machine, traft_statemachine_ops ops);
+
+#ifdef __cplusplus
+}
+#endif

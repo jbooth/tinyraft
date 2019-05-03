@@ -3,6 +3,9 @@
 #include <unistd.h>
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /**
  * Supports readlock, writelock, and wait_write functions.
  * Holders of readlock can wait_write to atomically 
@@ -34,3 +37,7 @@ int traft_rwlock_wrunlock(traft_rwlock_t *rwlock);
  * reacquiring readlock before returning.  Similar to pthread_cond_wait.
  */
 int traft_rwlock_waitwrite(traft_rwlock_t *rwlock);
+
+#ifdef __cplusplus
+}
+#endif

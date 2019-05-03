@@ -148,11 +148,6 @@ int traft_run_raftlet(const char *storagepath, traft_server server, traft_statem
   */
 int traft_stop_raftlet(traft_raftlet *raftlet);
 
-/**
-  * Block until a raftlet has stopped running.
-  */
-int traft_join_raftlet(traft_raftlet *raftlet);
-
 
 
 #ifdef __cplusplus

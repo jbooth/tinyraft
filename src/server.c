@@ -10,6 +10,7 @@
 #include "buffers.h"
 #include "wiretypes.h"
 #include "raftlet.h"
+#include "server.h"
 
 /*
  * This file manages two concepts:
@@ -28,6 +29,7 @@ typedef struct traft_client_set {
 
 // Represents the server for a single raftlet
 typedef struct traft_servlet_s {
+  traft_servlet_s   *next;     // intrusive linked list
   traft_client_set  clients;
   traft_raftlet_s   raftlet;
   int (*handle_request) (traft_raftlet_s *raftlet, traft_buff *req, traft_resp *resp);
@@ -129,10 +131,6 @@ static int read_all(int fd, uint8_t *buf, size_t count) {
   return 0;
 }
 
-static void servlet_handle_client(traft_servlet_s *servlet, struct pollfd client_fd, struct traft_clientinfo info) {
-
-}
-
 static void *servlet_run(void *arg) {
   traft_servlet_s *servlet = (traft_servlet_s*)arg;
 
@@ -206,7 +204,7 @@ typedef struct traft_accepter_s {
   int                 num_raftlets;
 } traft_accepter_s;
 
-static void wait_state(traft_accepter_s *accepter, accepter_state state) {
+static void wait_accepter_state(traft_accepter_s *accepter, accepter_state state) {
   pthread_mutex_lock(&accepter->servlets_guard);
   while (accepter->state != state) {
     pthread_cond_wait(&accepter->state_change, &accepter->servlets_guard);
@@ -241,11 +239,13 @@ static void * traft_do_accept(void *arg) {
     }
     // locate raftlet for this cluster_id
     traft_raftlet_s *found_raftlet = NULL;
-    for (int i = 0; i < server->num_raftlets; i++) {
-      traft_raftlet_s *raftlet = &server->servlets[i].raftlet;
+    
+    for (traft_servlet_s *servlet = server->servlets ; servlet = servlet->next ; servlet->next != NULL) {
+      traft_raftlet_s *raftlet = &servlet->raftlet;
       if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
           && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
         found_raftlet = raftlet;
+        break;
       }
     }
     // No raftlet for this ID, kill..  should we send an error back to client?
@@ -274,6 +274,17 @@ static int bind_accepter_sock(traft_accepter_s *server) {
   return listen(server->accept_fd, 10);
 }
 
+/** Internal API methods */
+int traft_run_raftlet_internal(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
+void *state_machine, traft_raftlet *raftlet, int (*handle_request) (traft_raftlet_s *raftlet, traft_buff *req, traft_resp *resp)) {
+  // allocate
+  traft_servlet_s *servlet = malloc(sizeof(traft_servlet_s));
+  // register
+
+  // start running
+  return 0;
+}
+
 /** PUBLIC API METHODS */
 int traft_start_server(uint16_t port, traft_server *ptr) {
   traft_accepter_s *server = malloc(sizeof(traft_accepter_s));
@@ -289,7 +300,7 @@ int traft_start_server(uint16_t port, traft_server *ptr) {
   memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
   err = pthread_create(&server->accept_thread, NULL, &traft_do_accept, server);
   if (err != 0) { goto START_SERVER_ERR; }
-  wait_state(server, RUN);
+  wait_accepter_state(server, RUN);
   // wait until serving
   *ptr = server;
   return 0;
@@ -297,21 +308,22 @@ int traft_start_server(uint16_t port, traft_server *ptr) {
   START_SERVER_ERR:
   free(server);
   return -1;
-
 }
 
 /** Requests shutdown of the provided acceptor and all attached raftlets. */
-int traft_stop_server(traft_server server) {
+int traft_stop_server(traft_server server_ptr) {
+  traft_accepter_s *server = (traft_accepter_s*) server_ptr;
   // mark to die
+  pthread_mutex_lock(&server->servlets_guard);
+  server->state = STOP_REQUESTED;
   // wait dead
+  while (server->state != DEAD) {
+    pthread_cond_wait(&server->state_change, &server->servlets_guard);
+  }
   // clean up
+  close(server->accept_fd);
+  free(server);
 }
-
-int traft_join_server(traft_server server) {
-  // wait to die
-  // clean up, close all
-}
-
 
 /** 
   * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
