@@ -32,7 +32,7 @@ typedef struct traft_servlet_s {
   traft_servlet_s   *next;     // intrusive linked list
   traft_client_set  clients;
   traft_raftlet_s   raftlet;
-  int (*handle_request) (traft_raftlet_s *raftlet, traft_buff *req, traft_resp *resp);
+  traft_server_ops  ops;
 } traft_servlet_s;
 
 // Adds the client or returns -1 if we're already full
@@ -158,7 +158,7 @@ static void *servlet_run(void *arg) {
         servlet_get_clientinfo(&servlet->clients, pollfds[i].fd, &info);
         // TODO timeout
         traft_buff_readreq(&req_buff, pollfds[i].fd);
-        int err = servlet->handle_request(&servlet->raftlet, &req_buff, &resp);
+        int err = servlet->ops.handle_request(&servlet->raftlet, &req_buff, &resp);
         if (err == -1) {
           goto SERVLET_DIE;
         }
@@ -170,11 +170,12 @@ static void *servlet_run(void *arg) {
   SERVLET_DIE:
   traft_buff_free(&req_buff);
   servlet_close_all(&servlet->clients);
+  servlet->ops.destroy_raftlet(&servlet->raftlet);
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
   // decrypt session key
-  char  session_key[32];
+  char session_key[32];
   if (crypto_box_curve25519xchacha20poly1305_open_detached(
     session_key, hello->session_key, hello->mac, 32, hello->nonce, hello->client_id, server->raftlet.private_key) == -1) {
     // decrypt error, tell client they're not auth'd and hangup
@@ -191,9 +192,11 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
 typedef enum accepter_state {
   INIT, RUN, STOP_REQUESTED, DEAD  
 } accepter_state;
+
 /** Structure containing our accepter socket and all registered raftlets */
 typedef struct traft_accepter_s {
   uint16_t            accept_port;
+  traft_server_ops    ops;
   int                 accept_fd;
   pthread_t           accept_thread;
   pthread_mutex_t     servlets_guard;
@@ -274,24 +277,13 @@ static int bind_accepter_sock(traft_accepter_s *server) {
   return listen(server->accept_fd, 10);
 }
 
-/** Internal API methods */
-int traft_run_raftlet_internal(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
-void *state_machine, traft_raftlet *raftlet, int (*handle_request) (traft_raftlet_s *raftlet, traft_buff *req, traft_resp *resp)) {
-  // allocate
-  traft_servlet_s *servlet = malloc(sizeof(traft_servlet_s));
-  // register
-
-  // start running
-  return 0;
-}
-
-/** PUBLIC API METHODS */
-int traft_start_server(uint16_t port, traft_server *ptr) {
+int traft_srv_start_server(uint16_t port, traft_server *ptr, traft_server_ops ops) {
   traft_accepter_s *server = malloc(sizeof(traft_accepter_s));
   if (server == NULL) {
     return -1;
   }
   server->accept_port = port;
+  server->ops = ops;
   pthread_mutex_init(&server->servlets_guard, NULL);
   pthread_cond_init(&server->state_change, NULL);
   server->state = INIT;
@@ -300,17 +292,18 @@ int traft_start_server(uint16_t port, traft_server *ptr) {
   memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
   err = pthread_create(&server->accept_thread, NULL, &traft_do_accept, server);
   if (err != 0) { goto START_SERVER_ERR; }
-  wait_accepter_state(server, RUN);
   // wait until serving
+  wait_accepter_state(server, RUN);
   *ptr = server;
   return 0;
 
   START_SERVER_ERR:
+  if (server->accept_fd > 0) { close(server->accept_fd); }
   free(server);
   return -1;
 }
 
-/** Requests shutdown of the provided acceptor and all attached raftlets. */
+
 int traft_stop_server(traft_server server_ptr) {
   traft_accepter_s *server = (traft_accepter_s*) server_ptr;
   // mark to die
@@ -325,24 +318,14 @@ int traft_stop_server(traft_server server_ptr) {
   free(server);
 }
 
-/** 
-  * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
-  * Allocates all resources necessary to process entries and starts threads before returning.
-  */
 int traft_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
 void *state_machine, traft_raftlet *raftlet) {
   return 0;
                       
 }
 
-/**
-  * Requests that a raftlet stop running.  It will clean up all resources and terminate threads before returning.
-  */
 int traft_stop_raftlet(traft_raftlet *raftlet);
 
-/**
-  * Block until a raftlet has stopped running.
-  */
 int traft_join_raftlet(traft_raftlet *raftlet);
 
 
