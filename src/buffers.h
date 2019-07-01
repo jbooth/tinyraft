@@ -36,6 +36,20 @@ int traft_buff_readreq(traft_buff *buff, int readfd);
 /** Writes buffer contents to specified fd.  */
 int traft_buff_writemsg(traft_buff *buff, int writefd);
 
+/** Writes a request with no body to the specified fd */
+int traft_buff_writereq(traft_req *req, int writefd);
+
+/** 
+ * Generates a session key, stores it in session_key, and writes a hello request 
+ * with encrypted session key to the provided FD.
+ */
+int traft_buff_writehello(int8_t *server_id, int8_t *client_id, int8_t *client_sk, int8_t *cluster_uuid, int8_t *session_key, int writefd);
+
+/** Reads a hello request off of the provided FD, leaivng session key encrypted */
+int traft_buff_readhello(traft_hello *hello, int readfd);
+
+/** Decrypts a hello request using the provided raftlet's secret key */
+traft_buff_decrypthello(traft_hello *hello, int8_t *raftlet_sk);
 
 /**
  *  Encodes a ForwardEntriesReq with provided body data into the supplied buffer.
@@ -70,6 +84,8 @@ traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
 int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termkey);
 
 int traft_write_resp(traft_resp *resp, int fd);
+
+int traft_read_resp(traft_resp *resp, int fd);
 
 typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
 

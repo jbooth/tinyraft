@@ -74,6 +74,32 @@ int traft_buff_writemsg(traft_buff *buff, int writefd) {
   return write_all(writefd, buff->buff, buff->msg_size);
 }
 
+int traft_buff_writereq(traft_req *req, int writefd) {
+  return write_all(writefd, (char*)req, RPC_REQ_LEN);
+}
+
+int traft_buff_writehello(int8_t *server_id, int8_t *client_id, int8_t *client_sk, int8_t *cluster_uuid, int8_t *session_key, int writefd) {
+  traft_hello hello;
+  memcpy(&hello.client_id, client_id, 32);
+  memcpy(&hello.server_id, server_id, 32);
+  memcpy(&hello.cluster_id, cluster_uuid, 16);
+  randombytes_buf(session_key, 32);
+  int err = crypto_box_curve25519xchacha20poly1305_detached(&hello.session_key, &hello.mac, session_key, 32, &hello.nonce, server_id, client_sk);
+  if (err != 0) { return -1; }
+  return write_all(writefd, (char*) &hello, RPC_HELLO_LEN);
+}
+
+
+int traft_buff_readhello(traft_hello *hello, int readfd) {
+  return read_all(readfd, (uint8_t*)hello, RPC_HELLO_LEN);
+}
+
+int traft_buff_decrypthello(traft_hello *hello, int8_t *raftlet_sk) {
+  return crypto_box_curve25519xchacha20poly1305_open_detached(
+    hello->session_key, hello->session_key, hello->mac, 32, hello->nonce, hello->client_id, raftlet_sk);
+}
+
+
 typedef unsigned char nonceval[crypto_box_curve25519xchacha20poly1305_NONCEBYTES];
 
 // Sets a nonce with all zeros except the first 4 bytes, which are the provided uint32.
@@ -334,6 +360,10 @@ int traft_buff_decode(traft_buff *b, traft_buff *out_buff, const uint8_t *termke
 
 int traft_write_resp(traft_resp *resp, int fd) {
   return write_all(fd, (uint8_t*)resp, RPC_RESP_LEN);
+}
+
+int traft_read_resp(traft_resp *resp, int fd) {
+  return read_all(fd, (uint8_t*)resp, RPC_RESP_LEN);
 }
 
 // Used to encode a termkey for each peer, their eyes only

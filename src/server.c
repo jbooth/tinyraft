@@ -174,11 +174,8 @@ static void *servlet_run(void *arg) {
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
-  // decrypt session key
-  char session_key[32];
-  if (crypto_box_curve25519xchacha20poly1305_open_detached(
-    session_key, hello->session_key, hello->mac, 32, hello->nonce, hello->client_id, server->raftlet.private_key) == -1) {
-    // decrypt error, tell client they're not auth'd and hangup
+  if (traft_buff_decrypthello(hello, server->raftlet.private_key) != 0) {
+    // TODO decrypt error, tell client they're not auth'd and hangup
   }
   // add to client_set
   traft_clientinfo clientinfo;
