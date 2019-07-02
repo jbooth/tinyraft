@@ -8,8 +8,13 @@
 extern "C" {
 #endif
 
+typedef struct traft_servlet {
+    uuid_t            cluster_id;
+    traft_secretkey_t my
+} traft_servlet;
+
 typedef struct traft_server_ops {
-  int (*handle_request) (traft_raftlet_s *raftlet, traft_buff *req, traft_resp *resp);
+  int (*handle_request) (void *raftlet, traft_clientinfo *client, traft_buff *req, traft_resp *resp);
 
   int (*init_raftlet) (const char *storagepath, traft_statemachine_ops ops, void *state_machine, traft_raftlet_s *raftlet);
 
@@ -26,7 +31,8 @@ int traft_srv_stop_server(traft_server server_ptr);
   * Allocates all resources necessary to process entries and starts threads before returning.
   */
 int traft_srv_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
-void *state_machine, traft_raftlet *raftlet);
+                            void *state_machine, traft_raftlet *raftlet);
+
 /**
   * Requests that a raftlet stop running.  It will clean up all resources and terminate threads before returning.
   */

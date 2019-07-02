@@ -118,19 +118,6 @@ static int servlet_prepare_poll(traft_client_set *c, struct pollfd *fds) {
   return count;
 }
 
-// Reads all.  Returns 0 on success, -1 on failure.
-static int read_all(int fd, uint8_t *buf, size_t count) {
-  while (count) {
-    ssize_t r = read(fd, buf, count);
-    if (r == -1) {
-      return -1;
-    }
-    count -= r;
-    buf += r;
-  }
-  return 0;
-}
-
 static void *servlet_run(void *arg) {
   traft_servlet_s *servlet = (traft_servlet_s*)arg;
 
@@ -179,7 +166,7 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
   }
   // add to client_set
   traft_clientinfo clientinfo;
-  memcpy(&clientinfo.remote_id, &hello->client_id, 32);
+  memcpy(&clientinfo.client_id, &hello->client_id, 32);
   memcpy(&clientinfo.session_key, &hello->session_key, 32);
   servlet_add_client(&server->clients, client_fd, clientinfo);
 }
@@ -232,7 +219,7 @@ static void * traft_do_accept(void *arg) {
     // read hello message
     // TODO this should have a somewhat aggressive timeout, these connections aren't authenticated yet
     // TODO TODO DDOS vulnerability
-    if (read_all(client_fd, (uint8_t*) &hello, RPC_HELLO_LEN) == -1) {
+    if (traft_buff_readhello(client_fd, hello) == -1) {
       // kill conn
       close(client_fd);
       continue;

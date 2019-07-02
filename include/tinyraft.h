@@ -88,8 +88,8 @@ int traft_start_server(uint16_t port, traft_server *ptr);
 int traft_stop_server(traft_server server);
 
 
-typedef uint8_t traft_pub_key[32];    // crypto_box_curve25519xchacha20poly1305_PUBLICKEYBYTES
-typedef uint8_t traft_secret_key[32]; // crypto_box_curve25519xchacha20poly1305_SECRETKEYBYTES
+typedef uint8_t traft_publickey_t[32];    // crypto_box_curve25519xchacha20poly1305_PUBLICKEYBYTES
+typedef uint8_t traft_secretkey_t[32]; // crypto_box_curve25519xchacha20poly1305_SECRETKEYBYTES
 
 #define TRAFT_MAX_PEERS 16
 /** Cluster-wide configuration values. */
@@ -110,15 +110,15 @@ typedef struct traft_cluster_config {
 
   // Cluster membership: IDs and hostname/ports
   uint16_t        ports[TRAFT_MAX_PEERS];           // + 2  * 16 = 72
-  traft_pub_key   peer_ids[TRAFT_MAX_PEERS];        // + 32 * 16 = 584
+  traft_publickey_t   peer_ids[TRAFT_MAX_PEERS];        // + 32 * 16 = 584
   char            hostnames[TRAFT_MAX_PEERS][256];  // + 4096 = 4680
   uint64_t        num_peers;                  // 4688
 } traft_cluster_config;
 #define TRAFT_CLUSTER_CONFIG_SIZE 4688
 
 typedef struct traft_raftlet_identity {
-  traft_pub_key     raftlet_id; // 32
-  traft_secret_key  secret_key; // 64
+  traft_publickey_t     raftlet_id; // 32
+  traft_secretkey_t     secret_key; // 64
 } traft_raftlet_identity;
 
 #define TRAFT_DEFAULT_PORT 1103

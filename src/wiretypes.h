@@ -24,8 +24,21 @@ extern "C" {
 
 #include <stdint.h>
 #include <uuid/uuid.h>
+#include "tinyraft.h"
 
-// Request types 
+/** INTERNAL TYPES */
+
+/** All symmetric and asymmetric keys are 32 bytes */
+typedef uint8_t traft_symmetrickey_t[32];
+
+typedef struct traft_clientinfo {
+  traft_publickey_t     client_id;
+  traft_symmetrickey_t  session_key;
+} traft_clientinfo;
+
+
+
+/** RPC REQUESTS */
 #define TRAFT_REQTYPE_NEWENTRY    1
 #define TRAFT_REQTYPE_APPENDENTRY 2
 #define TRAFT_REQTYPE_REQVOTE     3
@@ -129,6 +142,8 @@ typedef struct would_vote_req {
   uint32_t      last_log_idx; // 52
   uint32_t      padding;      // 56
 } would_vote_req;
+
+/** RPC RESPONSES */
 
 #define RPC_RESP_LEN 32
 
