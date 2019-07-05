@@ -8,35 +8,32 @@
 extern "C" {
 #endif
 
-typedef struct traft_servlet {
-    uuid_t            cluster_id;
-    traft_secretkey_t my
-} traft_servlet;
+
+#define TRAFT_SERVER_HANDLE_SUCCESS 0
+#define TRAFT_SERVER_KILL_CLIENT  1
+#define TRAFT_SERVER_KILL_RAFTLET 2
 
 typedef struct traft_server_ops {
-  int (*handle_request) (void *raftlet, traft_clientinfo *client, traft_buff *req, traft_resp *resp);
+  int (*handle_request) (void *raftlet, traft_clientinfo_t *client, traft_buff *req, traft_resp *resp);
 
-  int (*init_raftlet) (const char *storagepath, traft_statemachine_ops ops, void *state_machine, traft_raftlet_s *raftlet);
 
-  int (*destroy_raftlet) (traft_raftlet_s *raftlet);
+  void (*destroy_raftlet) (void *raftlet);
 } traft_server_ops;
 
-int traft_srv_start_server(uint16_t port, traft_server *ptr, traft_server_ops ops);
+int traft_srv_start_server(uint16_t port, traft_server *server_ptr, traft_server_ops ops);
 
 /** Requests shutdown of the provided acceptor and all attached raftlets. */
-int traft_srv_stop_server(traft_server server_ptr);
+int traft_srv_stop_server(traft_server server);
 
-/** 
-  * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
-  * Allocates all resources necessary to process entries and starts threads before returning.
-  */
-int traft_srv_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
-                            void *state_machine, traft_raftlet *raftlet);
+/**
+ * Adds a raftlet and starts
+ */
+int traft_srv_add_raftlet(traft_server server, traft_raftletinfo_t raftlet_info, void *raftlet);
 
 /**
   * Requests that a raftlet stop running.  It will clean up all resources and terminate threads before returning.
   */
-int traft_srv_stop_raftlet(traft_raftlet *raftlet);
+int traft_srv_stop_raftlet(traft_server server, traft_publickey_t raftlet_id);
 
 #ifdef __cplusplus
 }

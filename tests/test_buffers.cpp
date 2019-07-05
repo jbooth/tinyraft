@@ -26,9 +26,9 @@
 #include "buffers.h"
 #include "buffers.c"
 
-TEST (BuffersTest, Encoding) {
-  ASSERT_EQ(64, sizeof(traft_appendentry_req));
-  ASSERT_EQ(64, sizeof(traft_newentry_req));
+TEST (BuffersTest, EntriesRequests) {
+  ASSERT_EQ(RPC_REQ_LEN, sizeof(traft_appendentry_req));
+  ASSERT_EQ(RPC_REQ_LEN, sizeof(traft_newentry_req));
   traft_buff b;
 
   uint32_t data_len = 128;
@@ -38,7 +38,7 @@ TEST (BuffersTest, Encoding) {
 
   // Encode through a pipe, transcode to a file, decode from file
   int pipes[2];
-  ASSERT_EQ(0, pipe(pipes));
+  EXPECT_EQ(0, pipe(pipes));
 
   unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
   randombytes_buf(key, crypto_aead_chacha20poly1305_ietf_KEYBYTES);
@@ -56,31 +56,31 @@ TEST (BuffersTest, Encoding) {
   quorum_entry.idx = entry_idx - 1;
 
   // init buffers and send fwd_entries_req
-  ASSERT_EQ(0, traft_buff_alloc(&b, data_len + RPC_REQ_LEN));
+  EXPECT_EQ(0, traft_buff_alloc(&b, data_len + RPC_REQ_LEN));
   printf("encoding...\n");
   int encode_res;
   encode_res = traft_buff_encode_client(&b, term_id, client_idx, client_short_id, key, data, data_len);
   printf("encoded\n");
-  ASSERT_EQ(0, encode_res);
+  EXPECT_EQ(0, encode_res);
 
 
   // exercise write/read of a traft_newentry_req
   printf("msg size %d \n", b.msg_size);
-  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
-  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[0]));
+  EXPECT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
+  EXPECT_EQ(0, traft_buff_readreq(&b, pipes[0]));
 
   // leader transcode out to clients
-  ASSERT_EQ(0, traft_buff_transcode_leader(&b, key,key, this_entry, prev_entry, quorum_entry));
+  EXPECT_EQ(0, traft_buff_transcode_leader(&b, key,key, this_entry, prev_entry, quorum_entry));
 
   // write/read of appendentry_req
-  ASSERT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
-  ASSERT_EQ(0, traft_buff_readreq(&b, pipes[0]));
+  EXPECT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
+  EXPECT_EQ(0, traft_buff_readreq(&b, pipes[0]));
 
 
   // decode
   traft_buff out_buff;
-  ASSERT_EQ(0, traft_buff_alloc(&out_buff, data_len));
-  ASSERT_EQ(0, traft_buff_decode(&b, &out_buff, key));
+  EXPECT_EQ(0, traft_buff_alloc(&out_buff, data_len));
+  EXPECT_EQ(0, traft_buff_decode(&b, &out_buff, key));
   printf("decoded\n");
 
   // assert contents
@@ -90,10 +90,26 @@ TEST (BuffersTest, Encoding) {
   sodium_bin2hex(hex, 512, out_buff.buff, data_len);
   printf("decoded %s\n", hex);
 
-  ASSERT_EQ(0, memcmp(out_buff.buff, data, data_len));
+  EXPECT_EQ(0, memcmp(out_buff.buff, data, data_len));
 
   traft_buff_free(&b);
   traft_buff_free(&out_buff);
+
+}
+
+TEST (BuffersTest, Hello) {
+  ASSERT_EQ(RPC_HELLO_LEN, sizeof(traft_hello));
+  EXPECT_EQ(64, sizeof(traft_newentry_req));
+  traft_buff b;
+
+
+  int pipes[2];
+  EXPECT_EQ(0, pipe(pipes));
+
+  int server_read_fd = pipes[0];
+  int client_write_fd = pipes[1];
+
+  traft_symmetrickey_t key;
 
 }
 
@@ -118,7 +134,7 @@ TEST (BuffersTest, TermConfig) {
   cfg.num_peers = 3;
 
   traft_buff buff;
-  ASSERT_EQ(0, traft_buff_alloc(&buff, TRAFT_CLUSTER_CONFIG_SIZE * 2));
+  EXPECT_EQ(0, traft_buff_alloc(&buff, TRAFT_CLUSTER_CONFIG_SIZE * 2));
   uint64_t term_id = 5;
   traft_entry_id prev_idx;
   prev_idx.term_id = 4;
@@ -127,15 +143,15 @@ TEST (BuffersTest, TermConfig) {
   quorum_idx.term_id = 4;
   quorum_idx.idx = 9;
 
-  ASSERT_EQ(0, traft_gen_termconfig(&buff, &cfg, term_id, prev_idx, quorum_idx, host1pk, host1sk));
+  EXPECT_EQ(0, traft_gen_termconfig(&buff, &cfg, term_id, prev_idx, quorum_idx, host1pk, host1sk));
 
   traft_termconfig cfg1, cfg2, cfg3;
 
-  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg1, host1pk, host1sk));
-  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg2, host2pk, host2sk));
-  ASSERT_EQ(0, traft_deser_termconfig(&buff, &cfg3, host3pk, host3sk));
+  EXPECT_EQ(0, traft_deser_termconfig(&buff, &cfg1, host1pk, host1sk));
+  EXPECT_EQ(0, traft_deser_termconfig(&buff, &cfg2, host2pk, host2sk));
+  EXPECT_EQ(0, traft_deser_termconfig(&buff, &cfg3, host3pk, host3sk));
 
-  ASSERT_EQ(0, memcmp(cfg1.termkey, cfg2.termkey, 32));
-  ASSERT_EQ(3, cfg1.cluster_cfg.num_peers);
-  ASSERT_EQ(0, memcmp(cfg2.cluster_cfg.hostnames[0], host1, strlen(host1)));
+  EXPECT_EQ(0, memcmp(cfg1.termkey, cfg2.termkey, 32));
+  EXPECT_EQ(3, cfg1.cluster_cfg.num_peers);
+  EXPECT_EQ(0, memcmp(cfg2.cluster_cfg.hostnames[0], host1, strlen(host1)));
 }

@@ -28,17 +28,25 @@ extern "C" {
 
 /** INTERNAL TYPES */
 
-/** All symmetric and asymmetric keys are 32 bytes */
+/** xchacha20poly1305_KEYBYTES */
 typedef uint8_t traft_symmetrickey_t[32];
 
-typedef struct traft_clientinfo {
+/** Represents the identity of a connected client, contains negotiated session key. */
+typedef struct traft_clientinfo_t {
+  uuid_t                cluster_id;
   traft_publickey_t     client_id;
   traft_symmetrickey_t  session_key;
-} traft_clientinfo;
+} traft_clientinfo_t;
 
-
+/** Represents local identity of a server */
+typedef struct traft_raftletinfo_t {
+  uuid_t                    cluster_id;
+  traft_publickey_t         my_id; 
+  traft_secretkey_t         my_sk;
+} traft_raftletinfo_t;
 
 /** RPC REQUESTS */
+
 #define TRAFT_REQTYPE_NEWENTRY    1
 #define TRAFT_REQTYPE_APPENDENTRY 2
 #define TRAFT_REQTYPE_REQVOTE     3
@@ -65,8 +73,8 @@ typedef struct traft_hello {
   uint8_t       cluster_id[16];   // 48
   uint8_t       server_id[32];    // 80    
   uint8_t       nonce[24];        // 104 crypto_box_NONCEBYTES
-  uint8_t       session_key[32];  // 136 
-  uint8_t       mac[16];          // 152 
+  uint8_t       session_key[32];  // 136 crypto_box_KEYBYTES
+  uint8_t       mac[16];          // 152 crypto_box_MACBYTES
 } traft_hello;
 #define RPC_HELLO_LEN 152
 

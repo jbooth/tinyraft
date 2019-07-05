@@ -22,21 +22,22 @@
 // Tracks the set of clients being listened to by a server
 typedef struct traft_client_set {
   pthread_mutex_t  guard;
-  int                 fds[MAX_CLIENTS];
-  traft_clientinfo    info[MAX_CLIENTS];
+  int                   fds[MAX_CLIENTS];
+  traft_clientinfo_t    info[MAX_CLIENTS];
   int                 count;
 } traft_client_set;
 
 // Represents the server for a single raftlet
 typedef struct traft_servlet_s {
-  traft_servlet_s   *next;     // intrusive linked list
-  traft_client_set  clients;
-  traft_raftlet_s   raftlet;
-  traft_server_ops  ops;
+  traft_client_set    clients;
+  pthread_t           poll_thread;
+  traft_raftletinfo_t identity;
+  void                *raftlet;
+  traft_server_ops    ops;
 } traft_servlet_s;
 
 // Adds the client or returns -1 if we're already full
-static int servlet_add_client(traft_client_set *c, int fd, traft_clientinfo info) {
+static int servlet_add_client(traft_client_set *c, int fd, traft_clientinfo_t info) {
   pthread_mutex_lock(&c->guard);
   if (c->count == MAX_CLIENTS) {
     pthread_mutex_unlock(&c->guard);
@@ -49,7 +50,7 @@ static int servlet_add_client(traft_client_set *c, int fd, traft_clientinfo info
   return 0;
 }
 
-static int servlet_get_clientinfo(traft_client_set *c, int fd, traft_clientinfo *info) {
+static int servlet_get_clientinfo(traft_client_set *c, int fd, traft_clientinfo_t *info) {
   pthread_mutex_lock(&c->guard);
   for (int i = 0 ; i < c->count ; i++) {
     if (c->fds[i] == fd) {
@@ -127,7 +128,7 @@ static void *servlet_run(void *arg) {
 
   struct pollfd pollfds[MAX_CLIENTS];
   int polltimeout_ms = 200;
-  traft_clientinfo info;
+  traft_clientinfo_t info;
   
   while (1) {
     // poll
@@ -145,7 +146,7 @@ static void *servlet_run(void *arg) {
         servlet_get_clientinfo(&servlet->clients, pollfds[i].fd, &info);
         // TODO timeout
         traft_buff_readreq(&req_buff, pollfds[i].fd);
-        int err = servlet->ops.handle_request(&servlet->raftlet, &req_buff, &resp);
+        int err = servlet->ops.handle_request(&servlet->raftlet, &info, &req_buff, &resp);
         if (err == -1) {
           goto SERVLET_DIE;
         }
@@ -161,17 +162,17 @@ static void *servlet_run(void *arg) {
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
-  if (traft_buff_decrypthello(hello, server->raftlet.private_key) != 0) {
+  traft_clientinfo_t clientinfo;
+  if (traft_buff_decrypthello(hello, server->identity.my_sk) != 0) {
     // TODO decrypt error, tell client they're not auth'd and hangup
   }
   // add to client_set
-  traft_clientinfo clientinfo;
   memcpy(&clientinfo.client_id, &hello->client_id, 32);
   memcpy(&clientinfo.session_key, &hello->session_key, 32);
   servlet_add_client(&server->clients, client_fd, clientinfo);
 }
 
-#define MAX_SERVLETS 256
+#define MAX_SERVLETS 4
 
 typedef enum accepter_state {
   INIT, RUN, STOP_REQUESTED, DEAD  
@@ -219,7 +220,7 @@ static void * traft_do_accept(void *arg) {
     // read hello message
     // TODO this should have a somewhat aggressive timeout, these connections aren't authenticated yet
     // TODO TODO DDOS vulnerability
-    if (traft_buff_readhello(client_fd, hello) == -1) {
+    if (traft_buff_readhello(&hello, client_fd) == -1) {
       // kill conn
       close(client_fd);
       continue;
@@ -227,7 +228,8 @@ static void * traft_do_accept(void *arg) {
     // locate raftlet for this cluster_id
     traft_raftlet_s *found_raftlet = NULL;
     
-    for (traft_servlet_s *servlet = server->servlets ; servlet = servlet->next ; servlet->next != NULL) {
+    for (int i = 0 ; i < server->num_raftlets ; i++) {
+      traft_servlet_s *servlet = &server->servlets[i];
       traft_raftlet_s *raftlet = &servlet->raftlet;
       if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
           && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
@@ -302,14 +304,27 @@ int traft_stop_server(traft_server server_ptr) {
   free(server);
 }
 
-int traft_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, 
-void *state_machine, traft_raftlet *raftlet) {
-  return 0;
-                      
-}
 
-int traft_stop_raftlet(traft_raftlet *raftlet);
+int traft_srv_add_raftlet(traft_server server_ptr, traft_raftletinfo_t raftlet_info, void *raftlet) {
+  traft_accepter_s *server = (traft_accepter_s*) server_ptr;
+  pthread_mutex_lock(&server->servlets_guard);
+  traft_servlet_s *servlet =  &server->servlets[server->num_raftlets];
+  server->num_raftlets++;
+  servlet->raftlet = raftlet;
+  servlet->identity = raftlet_info;
+  servlet->ops = server->ops;
+  servlet->clients.count = 0;
+  pthread_mutex_init(&servlet->clients.guard, NULL);
+  int err = pthread_create(&servlet->poll_thread, NULL, &servlet_run, servlet);
+  if (err != 0) { 
+    server->num_raftlets--; 
+  }
+  pthread_mutex_unlock(&server->servlets_guard);
+  return err;
+};
 
-int traft_join_raftlet(traft_raftlet *raftlet);
+int traft_srv_stop_raftlet(traft_server server_ptr, traft_publickey_t raftlet_id) {
+
+};
 
 

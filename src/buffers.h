@@ -43,13 +43,13 @@ int traft_buff_writereq(traft_req *req, int writefd);
  * Generates a session key, stores it in session_key, and writes a hello request 
  * with encrypted session key to the provided FD.
  */
-int traft_buff_writehello(int8_t *server_id, int8_t *client_id, int8_t *client_sk, int8_t *cluster_uuid, int8_t *session_key, int writefd);
+int traft_buff_writehello(const traft_publickey_t server_id, const traft_publickey_t client_id, const traft_secretkey_t client_sk, const uuid_t cluster_uuid, traft_symmetrickey_t session_key, int writefd);
 
 /** Reads a hello request off of the provided FD, leaivng session key encrypted */
 int traft_buff_readhello(traft_hello *hello, int readfd);
 
 /** Decrypts a hello request using the provided raftlet's secret key */
-traft_buff_decrypthello(traft_hello *hello, int8_t *raftlet_sk);
+int traft_buff_decrypthello(traft_hello *hello, traft_secretkey_t raftlet_sk);
 
 /**
  *  Encodes a ForwardEntriesReq with provided body data into the supplied buffer.
@@ -62,16 +62,16 @@ traft_buff_decrypthello(traft_hello *hello, int8_t *raftlet_sk);
  *  Also note that we don't read any response in this function, it's a fire-and-forget.
  */
 int traft_buff_encode_client(traft_buff *b, uint64_t term_id, int32_t client_idx, uint16_t client_short_id,
-                    unsigned char *key, uint8_t *entry_data, int32_t entry_len);
+                    traft_symmetrickey_t session_key, uint8_t *entry_data, int32_t entry_len);
 
 /**
  *  Leader function.  Transcodes a received newentry request into the appendentry request that we'll persist.
  *  Expects newentry header and body in buffer, transcodes to appendentry header and body.
  */
-int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t *leader_termkey,
+int traft_buff_transcode_leader(traft_buff *b, traft_symmetrickey_t message_sessionkey, traft_symmetrickey_t leader_termkey,
                                 traft_entry_id this_entry, traft_entry_id prev_entry, traft_entry_id quorum_entry);
 
-/** Verifies and appendentries request via auth tag in header */
+/** Verifies an appendentries request via auth tag in header */
 int traft_buff_verify_follower(traft_buff *b);
 
 /** Returns this buffer's first 64 bytes as an appendentries_req */
@@ -87,21 +87,20 @@ int traft_write_resp(traft_resp *resp, int fd);
 
 int traft_read_resp(traft_resp *resp, int fd);
 
-typedef uint8_t traft_termkey[32]; // crypto_secretbox_xchacha20poly1305_KEYBYTES
 
 /** termconfig struct attached to termlog struct, used to encode/decode entries.  */
 typedef struct traft_termconfig {
   traft_cluster_config  cluster_cfg;  // 4688
-  traft_termkey         termkey;      // +32 = 4720
-  traft_pub_key         leader_id;    // +32 = 4752
+  traft_symmetrickey_t  termkey;      // +32 = 4720
+  traft_publickey_t     leader_id;    // +32 = 4752
   uint64_t              term_id;      // +8  = 4760
 } traft_termconfig;
 
 /** Generates a termconfig and stores it in the provided buffer. */
-int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uint64_t term_id, traft_entry_id prev_idx, traft_entry_id quorum_idx, const uint8_t *leader_id, const uint8_t *leader_private_key);
+int traft_gen_termconfig(traft_buff *buff, traft_cluster_config *membership, uint64_t term_id, traft_entry_id prev_idx, traft_entry_id quorum_idx, const traft_publickey_t leader_id, const traft_secretkey_t leader_sk);
 
 /** Decodes term config from an appendentries request, decrypting our termkey for this node. */
-int traft_deser_termconfig(traft_buff *b, traft_termconfig *cfg, const uint8_t *my_id, const uint8_t *my_secret_key);
+int traft_deser_termconfig(traft_buff *b, traft_termconfig *cfg, const traft_publickey_t my_id, const traft_secretkey_t my_sk);
 
 
 #ifdef __cplusplus

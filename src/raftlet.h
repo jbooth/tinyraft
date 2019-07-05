@@ -35,7 +35,7 @@ typedef struct traft_raftlet_s {
   traft_storage   storage;         // entry log storage
 } traft_raftlet_s;
 
-int traft_handle_req(traft_raftlet_s *raftlet, traft_clientinfo *client, traft_req *request, uint8_t *body);
+int traft_handle_req(traft_raftlet_s *raftlet, traft_clientinfo_t *client, traft_req *request, uint8_t *body);
 
 
 #ifdef __cplusplus

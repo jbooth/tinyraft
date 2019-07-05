@@ -75,18 +75,18 @@ int traft_buff_writemsg(traft_buff *buff, int writefd) {
 }
 
 int traft_buff_writereq(traft_req *req, int writefd) {
-  return write_all(writefd, (char*)req, RPC_REQ_LEN);
+  return write_all(writefd, (uint8_t*)req, RPC_REQ_LEN);
 }
 
-int traft_buff_writehello(int8_t *server_id, int8_t *client_id, int8_t *client_sk, int8_t *cluster_uuid, int8_t *session_key, int writefd) {
+int traft_buff_writehello(const traft_publickey_t server_id, const traft_publickey_t client_id, const traft_secretkey_t client_sk, const uuid_t cluster_uuid, traft_symmetrickey_t session_key, int writefd) {
   traft_hello hello;
   memcpy(&hello.client_id, client_id, 32);
   memcpy(&hello.server_id, server_id, 32);
   memcpy(&hello.cluster_id, cluster_uuid, 16);
   randombytes_buf(session_key, 32);
-  int err = crypto_box_curve25519xchacha20poly1305_detached(&hello.session_key, &hello.mac, session_key, 32, &hello.nonce, server_id, client_sk);
+  int err = crypto_box_curve25519xchacha20poly1305_detached(hello.session_key, hello.mac, session_key, 32, hello.nonce, server_id, client_sk);
   if (err != 0) { return -1; }
-  return write_all(writefd, (char*) &hello, RPC_HELLO_LEN);
+  return write_all(writefd, (uint8_t*) &hello, RPC_HELLO_LEN);
 }
 
 
@@ -94,9 +94,9 @@ int traft_buff_readhello(traft_hello *hello, int readfd) {
   return read_all(readfd, (uint8_t*)hello, RPC_HELLO_LEN);
 }
 
-int traft_buff_decrypthello(traft_hello *hello, int8_t *raftlet_sk) {
+int traft_buff_decrypt_sessionkey(traft_hello *hello, traft_secretkey_t raftlet_sk, traft_symmetrickey_t session_key) {
   return crypto_box_curve25519xchacha20poly1305_open_detached(
-    hello->session_key, hello->session_key, hello->mac, 32, hello->nonce, hello->client_id, raftlet_sk);
+    session_key, hello->session_key, hello->mac, 32, hello->nonce, hello->client_id, raftlet_sk);
 }
 
 
@@ -368,8 +368,8 @@ int traft_read_resp(traft_resp *resp, int fd) {
 
 // Used to encode a termkey for each peer, their eyes only
 typedef struct termkey_bin {
-  traft_pub_key peer_id; // 32
-  uint8_t       boxed_termkey[48]; // 80, 32 bytes key + 16 bytes MAC
+  traft_publickey_t peer_id; // 32
+  uint8_t           boxed_termkey[48]; // 80, 32 bytes key + 16 bytes MAC
 } termkey_bin;
 
 // serialized representation of termconfig as appendentry body
@@ -377,7 +377,7 @@ typedef struct termconfig_bin {
   traft_cluster_config  cluster_cfg;        // 4688
   termkey_bin   termkeys[TRAFT_MAX_PEERS];  // + (80 * 16) = 5968
   uint64_t      term_id;                    // 5976
-  traft_pub_key leader_id;                  // 6008
+  traft_publickey_t leader_id;                  // 6008
 } termconfig_bin;
 #define TRAFT_TERMCONFIG_BIN_SIZE 6008
 
