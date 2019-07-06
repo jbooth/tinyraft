@@ -65,7 +65,7 @@ TEST (BuffersTest, EntriesRequests) {
 
 
   // exercise write/read of a traft_newentry_req
-  printf("msg size %d \n", b.msg_size);
+  printf("msg size %zu \n", b.msg_size);
   EXPECT_EQ(0, traft_buff_writemsg(&b, pipes[1]));
   EXPECT_EQ(0, traft_buff_readreq(&b, pipes[0]));
 

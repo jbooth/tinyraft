@@ -133,13 +133,12 @@ static int append_entry_internal(traft_termlog *log, traft_appendentry_req *head
   if (header->prev_idx + 1 == log->header->max_entries) {
     return -1;
   }
-  // Execute write
+  // Overwrite previous FwdEntries header with new AppendEntries header
+  memcpy(entry->buff, header, RPC_REQ_LEN);
+  // Execute append to file.
   off_t prev_eof = lseek(log->entries_fd, 0, SEEK_END);
   if (prev_eof == -1) { return -1; }
-  if (traft_write_all(log->entries_fd, header, RPC_REQ_LEN) == -1) {
-    return -1;
-  }
-  if (traft_write_all(log->entries_fd, entry, header->info.body_len) == -1) {
+  if (traft_buff_writemsg(entry, log->entries_fd) == -1) {
     return -1;
   }
   // Update entries and notify readers
