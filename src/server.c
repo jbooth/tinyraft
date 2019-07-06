@@ -163,12 +163,11 @@ static void *servlet_run(void *arg) {
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
   traft_clientinfo_t clientinfo;
-  if (traft_buff_decrypthello(hello, server->identity.my_sk) != 0) {
+  memcpy(&clientinfo.client_id, &hello->client_id, 32);
+  if (traft_buff_decrypt_sessionkey(hello, server->identity.my_sk, clientinfo.session_key) != 0) {
     // TODO decrypt error, tell client they're not auth'd and hangup
   }
   // add to client_set
-  memcpy(&clientinfo.client_id, &hello->client_id, 32);
-  memcpy(&clientinfo.session_key, &hello->session_key, 32);
   servlet_add_client(&server->clients, client_fd, clientinfo);
 }
 

@@ -49,7 +49,7 @@ int traft_buff_writehello(const traft_publickey_t server_id, const traft_publick
 int traft_buff_readhello(traft_hello *hello, int readfd);
 
 /** Decrypts a hello request using the provided raftlet's secret key */
-int traft_buff_decrypthello(traft_hello *hello, traft_secretkey_t raftlet_sk);
+int traft_buff_decrypt_sessionkey(traft_hello *hello, traft_secretkey_t raftlet_sk, traft_symmetrickey_t session_key);
 
 /**
  *  Encodes a ForwardEntriesReq with provided body data into the supplied buffer.

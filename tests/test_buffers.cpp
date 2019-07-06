@@ -100,17 +100,29 @@ TEST (BuffersTest, EntriesRequests) {
 TEST (BuffersTest, Hello) {
   ASSERT_EQ(RPC_HELLO_LEN, sizeof(traft_hello));
   EXPECT_EQ(64, sizeof(traft_newentry_req));
-  traft_buff b;
 
+  traft_publickey_t client_pubkey, server_pubkey;
+  traft_secretkey_t client_sk, server_sk;
+  ASSERT_EQ(0, crypto_box_curve25519xchacha20poly1305_keypair(client_pubkey, client_sk));
+  ASSERT_EQ(0, crypto_box_curve25519xchacha20poly1305_keypair(server_pubkey, server_sk));
 
   int pipes[2];
-  EXPECT_EQ(0, pipe(pipes));
-
+  ASSERT_EQ(0, pipe(pipes));
   int server_read_fd = pipes[0];
   int client_write_fd = pipes[1];
 
-  traft_symmetrickey_t key;
+  uuid_t cluster_id;
+  randombytes_buf(cluster_id, sizeof(uuid_t));
+  traft_symmetrickey_t session_key;
+  
+  EXPECT_EQ(0, traft_buff_writehello(server_pubkey, client_pubkey, client_sk, cluster_id, session_key, client_write_fd));
 
+  traft_hello server_hello;
+  EXPECT_EQ(0, traft_buff_readhello(&server_hello, server_read_fd));
+  traft_symmetrickey_t server_session_key;
+  EXPECT_EQ(0, traft_buff_decrypt_sessionkey(&server_hello, server_sk, server_session_key));
+
+  EXPECT_EQ(0, memcmp(&server_session_key, session_key, sizeof(traft_symmetrickey_t)));
 }
 
 TEST (BuffersTest, TermConfig) {
