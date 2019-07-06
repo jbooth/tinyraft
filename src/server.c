@@ -226,22 +226,23 @@ static void * traft_do_accept(void *arg) {
       continue;
     }
     // locate raftlet for this cluster_id
-    traft_raftlet_s *found_raftlet = NULL;
+    traft_servlet_s *found_servlet = NULL;
     
     for (int i = 0 ; i < server->num_raftlets ; i++) {
       traft_servlet_s *servlet = &server->servlets[i];
-      traft_raftlet_s *raftlet = &servlet->raftlet;
-      if (memcmp(&hello.cluster_id, raftlet->cluster_id, 16) == 0 
-          && memcmp(&hello.server_id, raftlet->raftlet_id, 32) == 0) {
-        found_raftlet = raftlet;
+      traft_raftletinfo_t *raftlet_info = &servlet->identity;
+
+      if (memcmp(&hello.cluster_id, raftlet_info->cluster_id, 16) == 0 
+          && memcmp(&hello.server_id, raftlet_info->my_id, 32) == 0) {
+        found_servlet = servlet;
         break;
       }
     }
     // No raftlet for this ID, kill..  should we send an error back to client?
     // TODO log
-    if (found_raftlet == NULL) { close(client_fd); continue; }
+    if (found_servlet == NULL) { close(client_fd); continue; }
     // process raftlet
-    servlet_add_conn(found_raftlet, client_fd, &hello);
+    servlet_add_conn(found_servlet, client_fd, &hello);
   }
   ACCEPTER_DIE:
   close(server->accept_fd);
@@ -258,7 +259,7 @@ static int bind_accepter_sock(traft_accepter_s *server) {
   in_any.sin_family = AF_INET;
   in_any.sin_addr.s_addr = INADDR_ANY;
   in_any.sin_port = server->accept_port;
-  int err = bind(server->accept_fd, &in_any, sizeof(struct sockaddr_in));
+  int err = bind(server->accept_fd, (const struct sockaddr*)&in_any, sizeof(struct sockaddr_in));
   if (err == -1) { return -1; } 
   return listen(server->accept_fd, 10);
 }
