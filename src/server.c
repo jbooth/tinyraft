@@ -19,17 +19,18 @@
  */
 #define MAX_CLIENTS 64
 
-// Tracks the set of clients being listened to by a server
-typedef struct traft_client_set {
-  pthread_mutex_t  guard;
-  int                   fds[MAX_CLIENTS];
-  traft_connection_t    info[MAX_CLIENTS];
-  int                 count;
-} traft_client_set;
+
+typedef enum servlet_state {
+  INIT, RUN, STOP_REQUESTED, DEAD  
+} servlet_state;
 
 // Represents the server for a single raftlet
 typedef struct traft_servlet_s {
-  traft_client_set    clients;
+  pthread_mutex_t     guard;
+  servlet_state       state;
+  pthread_cond_t      state_change;
+  traft_connection_t  clients[MAX_CLIENTS];
+  int                 num_clients;
   pthread_t           poll_thread;
   traft_raftletinfo_t identity;
   void                *raftlet;
@@ -37,85 +38,85 @@ typedef struct traft_servlet_s {
 } traft_servlet_s;
 
 // Adds the client or returns -1 if we're already full
-static int servlet_add_client(traft_client_set *c, int fd, traft_connection_t info) {
-  pthread_mutex_lock(&c->guard);
-  if (c->count == MAX_CLIENTS) {
-    pthread_mutex_unlock(&c->guard);
+static int servlet_add_client(traft_servlet_s *s, int fd, traft_connection_t conn) {
+  pthread_mutex_lock(&s->guard);
+  if (s->num_clients == MAX_CLIENTS) {
+    pthread_mutex_unlock(&s->guard);
     return -1;
   }
-  c->fds[c->count] = fd;
-  c->info[c->count] = info;
-  c->count++;
-  pthread_mutex_unlock(&c->guard);
+  s->clients[s->num_clients] = conn;
+  s->num_clients++;
+  pthread_mutex_unlock(&s->guard);
   return 0;
 }
 
-static int servlet_get_clientinfo(traft_client_set *c, int fd, traft_connection_t *info) {
-  pthread_mutex_lock(&c->guard);
-  for (int i = 0 ; i < c->count ; i++) {
-    if (c->fds[i] == fd) {
-      *info = c->info[i];
-      pthread_mutex_unlock(&c->guard);
+static int servlet_get_clientinfo(traft_servlet_s *s, int fd, traft_connection_t *info) {
+  pthread_mutex_lock(&s->guard);
+  for (int i = 0 ; i < s->num_clients ; i++) {
+    if (s->clients[i].fd == fd) {
+      *info = s->clients[i];
+      pthread_mutex_unlock(&s->guard);
       return 0;
     }
   }
   // fd not found
-  pthread_mutex_unlock(&c->guard);
+  pthread_mutex_unlock(&s->guard);
   return -1;
 }
 
-static void servlet_kill_client(traft_client_set *c, int fd) {
+static void servlet_kill_client(traft_servlet_s *s, int fd) {
   if (fd < 1) { return; }
 
-  pthread_mutex_lock(&c->guard);
+  pthread_mutex_lock(&s->guard);
   // find fd_idx in the array
   int fd_idx = -1;
-  for (int i = 0 ; i < c->count ; i++) {
-    if (c->fds[i] == fd) {
+  for (int i = 0 ; i < s->num_clients ; i++) {
+    if (s->clients[i].fd == fd) {
       fd_idx = i;
       break;
     }
   }
   // move top element to our last position and decrement count
   if (fd_idx >= 0) {
-    int last_idx = c->count - 1;
-    c->fds[fd_idx] = c->fds[last_idx];
-    c->info[fd_idx] = c->info[last_idx];
-    c->fds[last_idx] = -1;
-    c->count--;
+    int last_idx = s->num_clients - 1;
+    s->clients[fd_idx] = s->clients[last_idx];
+    s->clients[last_idx].fd = -1;
+    s->num_clients--;
   }
-  pthread_mutex_unlock(&c->guard);
+  pthread_mutex_unlock(&s->guard);
 
   close(fd);
 }
 
-static void servlet_close_all(traft_client_set *c) {
+static void servlet_close(traft_servlet_s *s) {
   // copy to temp buffer with lock held
-  pthread_mutex_lock(&c->guard);
+  pthread_mutex_lock(&s->guard);
   int fds[MAX_CLIENTS];
-  int num_fds = c->count;
-  for (int i = 0 ; i < c->count; i++) {
-    fds[i] = c->fds[i];
-    c->fds[i] = -1;
+  int num_fds = s->num_clients;
+  for (int i = 0 ; i < s->num_clients; i++) {
+    fds[i] = s->clients[i].fd;
+    s->clients[i].fd = -1;
   }
-  c->count = 0;
-  pthread_mutex_unlock(&c->guard);
+  s->num_clients = 0;
 
   // close all
   for (int i = 0 ; i < num_fds ; i++) {
     if (fds[i]) { close(fds[i]); }
   }
+  s->state = DEAD;
+  pthread_cond_broadcast(&s->state_change);
+  pthread_mutex_unlock(&s->guard);
 }
 
 // Sets up the provided array of pollfds and returns number of fds to poll for
-static int servlet_prepare_poll(traft_client_set *c, struct pollfd *fds) {
+static int servlet_prepare_poll(traft_servlet_s *s, struct pollfd *fds) {
   memset(fds, 0, sizeof(int) * MAX_CLIENTS);
-  pthread_mutex_lock(&c->guard);
-  for (int i = 0 ; i < c->count ; i++) {
-    fds[i].fd = c->fds[i];
+  pthread_mutex_lock(&s->guard);
+  for (int i = 0 ; i < s->num_clients ; i++) {
+    fds[i].fd = s->clients[i].fd;
   }
-  int count = c->count;
-  pthread_mutex_unlock(&c->guard);
+  int count = s->num_clients;
+  pthread_mutex_unlock(&s->guard);
   return count;
 }
 
@@ -157,7 +158,7 @@ static void *servlet_run(void *arg) {
   }
   SERVLET_DIE:
   traft_buff_free(&req_buff);
-  servlet_close_all(&servlet->clients);
+  servlet_close(&servlet);
   servlet->ops.destroy_raftlet(&servlet->raftlet);
 }
 
@@ -169,6 +170,14 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
   }
   // add to client_set
   servlet_add_client(&server->clients, client_fd, clientinfo);
+}
+
+static void servlet_stop(traft_servlet_s *server) {
+  pthread_mutex_lock(&server->guard);
+  while (server->state != DEAD) {
+    pthread_cond_wait(&server->state_change, &server->guard);
+  }
+  pthread_mutex_unlock(&server->guard);
 }
 
 #define MAX_SERVLETS 4
@@ -314,8 +323,12 @@ int traft_srv_add_raftlet(traft_server server_ptr, traft_raftletinfo_t raftlet_i
   servlet->raftlet = raftlet;
   servlet->identity = raftlet_info;
   servlet->ops = server->ops;
-  servlet->clients.count = 0;
-  pthread_mutex_init(&servlet->clients.guard, NULL);
+  servlet->num_clients = 0;
+  for (int i = 0 ; i < MAX_CLIENTS ; i++) {
+    servlet->clients[i].fd = -1;
+  }
+
+  pthread_mutex_init(&servlet->guard, NULL);
   int err = pthread_create(&servlet->poll_thread, NULL, &servlet_run, servlet);
   if (err != 0) { 
     server->num_raftlets--; 

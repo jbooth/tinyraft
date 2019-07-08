@@ -146,44 +146,10 @@ int traft_run_raftlet(const char *storagepath, traft_server server,
 
 /** 
  * Executes a mutation, waits until majority have committed and it's been applied locally, 
- * and writes any response to response_buff.  
+ * and writes any response to response_buff.  Threadsafe.
  */
 int traft_write_sync(traft_raftlet *raftlet, const uint8_t *msg, size_t msg_len, 
                       uint8_t *response_buff, size_t max_response_len);
-
-
-typedef uint32_t traft_pending_write;
-
-/** Represents an entry that has been committed on the current leader but not necessarily by a quorum.  */
-typedef struct traft_pending_entry {
-  uint64_t term_id;
-  uint32_t entry_idx;
-} traft_pending_write;
-
-/** Sends a write to the leader, putting it's pending write ID in *pending_write. */
-int traft_send_write_async(traft_raftlet *raftlet, const uint8_t *msg, size_t msg_len, traft_pending_write *pending_write);
-
-/** 
- * Waits until the leader has locally written and fsynced this pending write to disk.  
- * The message has not necessarily been committed by a quorum of members yet.
- */
-int traft_wait_leader_commit(traft_raftlet *raftlet, traft_pending_write pending_write, traft_pending_entry *pending_entry);
-
-/** Blocks until the provided entry_id has been committed to the WAL by a majority of members. */
-int traft_wait_entry_quorum(traft_raftlet *raftlet, traft_entry_id entry_id);
-
-/** 
- * Blocks until the provided entry_id has been committed to the WAL by a majority of members 
- *  and it's been applied locally.  Writes any response to response_buff.
- */
-int traft_wait_entry_applied(traft_raftlet *raftlet, traft_entry_id entry_id)
-
-
-/**
-  * Requests that a raftlet stop running.  The thread executing traft_run_raflet will return TRAFT_STOP_REQUESTED.
-  */
-int traft_stop_raftlet(traft_raftlet *raftlet);
-
 
 
 #ifdef __cplusplus
