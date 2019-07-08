@@ -23,7 +23,7 @@
 typedef struct traft_client_set {
   pthread_mutex_t  guard;
   int                   fds[MAX_CLIENTS];
-  traft_clientinfo_t    info[MAX_CLIENTS];
+  traft_connection_t    info[MAX_CLIENTS];
   int                 count;
 } traft_client_set;
 
@@ -37,7 +37,7 @@ typedef struct traft_servlet_s {
 } traft_servlet_s;
 
 // Adds the client or returns -1 if we're already full
-static int servlet_add_client(traft_client_set *c, int fd, traft_clientinfo_t info) {
+static int servlet_add_client(traft_client_set *c, int fd, traft_connection_t info) {
   pthread_mutex_lock(&c->guard);
   if (c->count == MAX_CLIENTS) {
     pthread_mutex_unlock(&c->guard);
@@ -50,7 +50,7 @@ static int servlet_add_client(traft_client_set *c, int fd, traft_clientinfo_t in
   return 0;
 }
 
-static int servlet_get_clientinfo(traft_client_set *c, int fd, traft_clientinfo_t *info) {
+static int servlet_get_clientinfo(traft_client_set *c, int fd, traft_connection_t *info) {
   pthread_mutex_lock(&c->guard);
   for (int i = 0 ; i < c->count ; i++) {
     if (c->fds[i] == fd) {
@@ -128,7 +128,7 @@ static void *servlet_run(void *arg) {
 
   struct pollfd pollfds[MAX_CLIENTS];
   int polltimeout_ms = 200;
-  traft_clientinfo_t info;
+  traft_connection_t info;
   
   while (1) {
     // poll
@@ -162,7 +162,7 @@ static void *servlet_run(void *arg) {
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
-  traft_clientinfo_t clientinfo;
+  traft_connection_t clientinfo;
   memcpy(&clientinfo.client_id, &hello->client_id, 32);
   if (traft_buff_decrypt_sessionkey(hello, server->identity.my_sk, clientinfo.session_key) != 0) {
     // TODO decrypt error, tell client they're not auth'd and hangup

@@ -29,12 +29,6 @@ extern "C" {
 #include <uuid/uuid.h>
 #include <sodium.h>
 
-/** Uniquely identifies an entry in the replicated log. */
-typedef struct traft_entry_id {
-  uint64_t  term_id;
-  uint32_t  idx;
-} traft_entry_id;
-
 /**
  * State machines do three things:
  * 1)  Have committed log entries applied to them to update their state.
@@ -130,21 +124,63 @@ typedef struct traft_raftlet_identity {
  */
 void gen_cluster(traft_cluster_config *cfg, int peer_count, char *hostnames, uint16_t *ports);
 
-typedef struct traft_raftlet {
-  uuid_t                      cluster_id;
-  traft_statemachine_ops      ops;
-  void                        *state_machine;
-  void                        *server_state;
-} traft_raftlet;
+typedef void * traft_raftlet; 
+
+
+int traft_init_raftlet(traft_raftlet *ptrptr,
+                       const char *storagepath, traft_server server, 
+                       const traft_publickey_t my_id, const traft_secretkey_t my_sk,
+                       int log_fd, const char *log_prefix);
+/**
+  * Registers a raftlet for service on the server's port, spins off threads to drive termlog replication, 
+  * then uses this thread to apply state_machine operations from the termlog.
+  * Application logging is sent to the provided server's log_fd, with the provided log_prefix as a prefix.
+  * Will clean up and return an error rather than trying to recover if we encounter problems, 
+  * including transient network slowness. Recommend running in a loop.
+  */
+int traft_run_raftlet(const char *storagepath, traft_server server, 
+                      traft_statemachine_ops ops, void *state_machine, 
+                      const traft_publickey_t my_id, const traft_secretkey_t my_sk,
+                      const char *log_prefix);
+
 
 /** 
-  * Starts a raftlet serving the provided, initialized storagepath on the provided server.  
-  * Allocates all resources necessary to process entries and starts threads before returning.
-  */
-int traft_run_raftlet(const char *storagepath, traft_server server, traft_statemachine_ops ops, void *state_machine, traft_raftlet *raftlet);
+ * Executes a mutation, waits until majority have committed and it's been applied locally, 
+ * and writes any response to response_buff.  
+ */
+int traft_write_sync(traft_raftlet *raftlet, const uint8_t *msg, size_t msg_len, 
+                      uint8_t *response_buff, size_t max_response_len);
+
+
+typedef uint32_t traft_pending_write;
+
+/** Represents an entry that has been committed on the current leader but not necessarily by a quorum.  */
+typedef struct traft_pending_entry {
+  uint64_t term_id;
+  uint32_t entry_idx;
+} traft_pending_write;
+
+/** Sends a write to the leader, putting it's pending write ID in *pending_write. */
+int traft_send_write_async(traft_raftlet *raftlet, const uint8_t *msg, size_t msg_len, traft_pending_write *pending_write);
+
+/** 
+ * Waits until the leader has locally written and fsynced this pending write to disk.  
+ * The message has not necessarily been committed by a quorum of members yet.
+ */
+int traft_wait_leader_commit(traft_raftlet *raftlet, traft_pending_write pending_write, traft_pending_entry *pending_entry);
+
+/** Blocks until the provided entry_id has been committed to the WAL by a majority of members. */
+int traft_wait_entry_quorum(traft_raftlet *raftlet, traft_entry_id entry_id);
+
+/** 
+ * Blocks until the provided entry_id has been committed to the WAL by a majority of members 
+ *  and it's been applied locally.  Writes any response to response_buff.
+ */
+int traft_wait_entry_applied(traft_raftlet *raftlet, traft_entry_id entry_id)
+
 
 /**
-  * Requests that a raftlet stop running.  It will clean up all resources and terminate threads before returning.
+  * Requests that a raftlet stop running.  The thread executing traft_run_raflet will return TRAFT_STOP_REQUESTED.
   */
 int traft_stop_raftlet(traft_raftlet *raftlet);
 

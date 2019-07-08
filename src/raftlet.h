@@ -28,14 +28,14 @@ extern "C" {
 #include "wiretypes.h"
 #include "storage.h"
 
-typedef struct traft_raftlet_s {
+typedef struct traft_connection_t {
   uuid_t          cluster_id;
   uint8_t         raftlet_id[32];  // Raftlet public key
   uint8_t         private_key[32]; // Raftlet private key
   traft_storage   storage;         // entry log storage
-} traft_raftlet_s;
+} traft_connection_t;
 
-int traft_handle_req(traft_raftlet_s *raftlet, traft_clientinfo_t *client, traft_req *request, uint8_t *body);
+int traft_handle_req(traft_connection_t *raftlet, traft_connection_t *client, traft_req *request, uint8_t *body);
 
 
 #ifdef __cplusplus
