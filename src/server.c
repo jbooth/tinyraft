@@ -292,6 +292,7 @@ int traft_srv_start_server(uint16_t port, traft_server *ptr, traft_server_ops op
 
 int traft_stop_server(traft_server server_ptr) {
   traft_accepter_s *server = (traft_accepter_s*) server_ptr;
+  // TODO kill all servlets
   // mark to die
   pthread_mutex_lock(&server->servlets_guard);
   server->state = STOP_REQUESTED;
@@ -324,7 +325,29 @@ int traft_srv_add_raftlet(traft_server server_ptr, traft_raftletinfo_t raftlet_i
 };
 
 int traft_srv_stop_raftlet(traft_server server_ptr, traft_publickey_t raftlet_id) {
+  traft_accepter_s *server = (traft_accepter_s*) server_ptr;
+  pthread_mutex_lock(&server->servlets_guard);
 
+  traft_servlet_s *found_servlet = NULL;
+  int found_idx = 0;
+  for (int i = 0 ; i < server->num_raftlets ; i++) {
+    if (memcmp(server->servlets[i].identity.my_id, raftlet_id, sizeof(traft_publickey_t)) == 0) {
+      found_servlet = &server->servlets[i];
+      found_idx = i;
+      break;
+    }
+  }
+  if (found_servlet == NULL) {
+    // No raftlets matched provided raftlet_id
+    goto FAIL;
+  }
+  int err = traft_stop_server(server_ptr);
+
+  traft_servlet_s *last_servlet =  &server->servlets[server->num_raftlets - 1];
+
+  FAIL:
+  pthread_mutex_unlock(&server->servlets_guard);
+  return -1;
 };
 
 
