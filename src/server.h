@@ -15,7 +15,7 @@ extern "C" {
 #define TRAFT_SERVER_KILL_RAFTLET 2
 
 typedef struct traft_server_ops {
-  int (*handle_request) (void *raftlet, traft_connection_t *client, traft_buff *req, traft_resp *resp);
+  int (*handle_request) (void *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp);
 
 
   void (*destroy_raftlet) (void *raftlet);

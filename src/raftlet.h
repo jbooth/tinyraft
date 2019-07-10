@@ -28,7 +28,7 @@ extern "C" {
 #include "wiretypes.h"
 #include "storage.h"
 
-int traft_handle_req(traft_connection_t *raftlet, traft_connection_t *client, traft_req *request, uint8_t *body);
+int traft_handle_req(void *raftlet, traft_conninfo_t *client, traft_req *request, uint8_t *body);
 
 
 #ifdef __cplusplus

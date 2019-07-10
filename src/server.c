@@ -24,12 +24,16 @@ typedef enum servlet_state {
   S_INIT, S_RUN, S_STOP_REQUESTED, S_DEAD  
 } servlet_state;
 
+struct client {
+  traft_conninfo_t  info;
+  int               fd;
+};
 // Represents the server for a single raftlet
 typedef struct traft_servlet_s {
   pthread_mutex_t     guard;
   servlet_state       state;
   pthread_cond_t      state_change;
-  traft_connection_t  clients[MAX_CLIENTS];
+  struct client       clients[MAX_CLIENTS];
   int                 num_clients;
   pthread_t           poll_thread;
   traft_raftletinfo_t identity;
@@ -38,23 +42,23 @@ typedef struct traft_servlet_s {
 } traft_servlet_s;
 
 // Adds the client or returns -1 if we're already full
-static int servlet_add_client(traft_servlet_s *s, int fd, traft_connection_t conn) {
+static int servlet_add_client(traft_servlet_s *s, int fd, traft_conninfo_t conn) {
   pthread_mutex_lock(&s->guard);
   if (s->num_clients == MAX_CLIENTS) {
     pthread_mutex_unlock(&s->guard);
     return -1;
   }
-  s->clients[s->num_clients] = conn;
+  s->clients[s->num_clients] = (struct client){.info = conn, .fd = fd};
   s->num_clients++;
   pthread_mutex_unlock(&s->guard);
   return 0;
 }
 
-static int servlet_get_clientinfo(traft_servlet_s *s, int fd, traft_connection_t *info) {
+static int servlet_get_clientinfo(traft_servlet_s *s, int fd, traft_conninfo_t *info) {
   pthread_mutex_lock(&s->guard);
   for (int i = 0 ; i < s->num_clients ; i++) {
     if (s->clients[i].fd == fd) {
-      *info = s->clients[i];
+      *info = s->clients[i].info;
       pthread_mutex_unlock(&s->guard);
       return 0;
     }
@@ -129,7 +133,7 @@ static void *servlet_run(void *arg) {
 
   struct pollfd pollfds[MAX_CLIENTS];
   int polltimeout_ms = 200;
-  traft_connection_t info;
+  traft_conninfo_t info;
   
   while (1) {
     // poll
@@ -162,7 +166,7 @@ static void *servlet_run(void *arg) {
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
-  traft_connection_t clientinfo;
+  traft_conninfo_t clientinfo;
   memcpy(&clientinfo.client_id, &hello->client_id, 32);
   if (traft_buff_decrypt_sessionkey(hello, server->identity.my_sk, clientinfo.session_key) != 0) {
     // TODO decrypt error, tell client they're not auth'd and hangup

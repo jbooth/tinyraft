@@ -38,16 +38,15 @@ typedef struct traft_entry_id {
 typedef uint8_t traft_symmetrickey_t[32];
 
 /** 
- * Represents a connection between client and server.  
+ * Information about a connection between two peers.
  * Contains negotiated session key and identity information. 
  */
-typedef struct traft_connection_t {
+typedef struct traft_conninfo_t {
   uuid_t                cluster_id;
   traft_publickey_t     client_id;
   traft_publickey_t     server_id;
   traft_symmetrickey_t  session_key;
-  int                   fd;
-} traft_connection_t;
+} traft_conninfo_t;
 
 /** Represents local identity of a server */
 typedef struct traft_raftletinfo_t {
