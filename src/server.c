@@ -137,18 +137,18 @@ static void *servlet_run(void *arg) {
   
   while (1) {
     // poll
-    int num_poll_fds = servlet_prepare_poll(&servlet->clients, pollfds);
+    int num_poll_fds = servlet_prepare_poll(servlet, pollfds);
     err = poll(pollfds, num_poll_fds, polltimeout_ms);
     if (err == -1) { 
       goto SERVLET_DIE;
     }
     for (int i = 0 ; i < num_poll_fds ; i++) {
       if (pollfds[i].revents & (POLLHUP | POLLERR)) {
-        servlet_kill_client(&servlet->clients, pollfds[i].fd);
+        servlet_kill_client(servlet, pollfds[i].fd);
         continue;
       }
       if (pollfds[i].revents & POLLIN) {
-        servlet_get_clientinfo(&servlet->clients, pollfds[i].fd, &info);
+        servlet_get_clientinfo(servlet, pollfds[i].fd, &info);
         // TODO timeout
         traft_buff_readreq(&req_buff, pollfds[i].fd);
         int err = servlet->ops.handle_request(&servlet->raftlet, &info, &req_buff, &resp);
@@ -162,7 +162,7 @@ static void *servlet_run(void *arg) {
   }
   SERVLET_DIE:
   traft_buff_free(&req_buff);
-  servlet_close(&servlet);
+  servlet_close(servlet);
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
@@ -172,7 +172,7 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
     // TODO decrypt error, tell client they're not auth'd and hangup
   }
   // add to client_set
-  servlet_add_client(&server->clients, client_fd, clientinfo);
+  servlet_add_client(server, client_fd, clientinfo);
 }
 
 static int servlet_stop(traft_servlet_s *server) {
