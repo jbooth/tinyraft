@@ -21,7 +21,7 @@
 
 
 typedef enum servlet_state {
-  INIT, RUN, STOP_REQUESTED, DEAD  
+  S_INIT, S_RUN, S_STOP_REQUESTED, S_DEAD  
 } servlet_state;
 
 // Represents the server for a single raftlet
@@ -103,7 +103,7 @@ static void servlet_close(traft_servlet_s *s) {
   for (int i = 0 ; i < num_fds ; i++) {
     if (fds[i]) { close(fds[i]); }
   }
-  s->state = DEAD;
+  s->state = S_DEAD;
   pthread_cond_broadcast(&s->state_change);
   pthread_mutex_unlock(&s->guard);
 }
@@ -159,7 +159,6 @@ static void *servlet_run(void *arg) {
   SERVLET_DIE:
   traft_buff_free(&req_buff);
   servlet_close(&servlet);
-  servlet->ops.destroy_raftlet(&servlet->raftlet);
 }
 
 static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello *hello) {
@@ -172,18 +171,19 @@ static void servlet_add_conn(traft_servlet_s* server, int client_fd, traft_hello
   servlet_add_client(&server->clients, client_fd, clientinfo);
 }
 
-static void servlet_stop(traft_servlet_s *server) {
+static int servlet_stop(traft_servlet_s *server) {
   pthread_mutex_lock(&server->guard);
-  while (server->state != DEAD) {
+  while (server->state != S_DEAD) {
     pthread_cond_wait(&server->state_change, &server->guard);
   }
   pthread_mutex_unlock(&server->guard);
+  return 0;
 }
 
 #define MAX_SERVLETS 4
 
 typedef enum accepter_state {
-  INIT, RUN, STOP_REQUESTED, DEAD  
+  A_INIT, A_RUN, A_STOP_REQUESTED, A_DEAD  
 } accepter_state;
 
 /** Structure containing our accepter socket and all registered raftlets */
@@ -254,6 +254,10 @@ static void * traft_do_accept(void *arg) {
   }
   ACCEPTER_DIE:
   close(server->accept_fd);
+  pthread_mutex_lock(&server->servlets_guard);
+  pthread_cond_broadcast(&server->state_change);
+  server->state = A_DEAD;
+  pthread_mutex_unlock(&server->servlets_guard);
   // TODO close all servlets/raftlets
   // TODO log errno
   free(server);
@@ -281,14 +285,14 @@ int traft_srv_start_server(uint16_t port, traft_server *ptr, traft_server_ops op
   server->ops = ops;
   pthread_mutex_init(&server->servlets_guard, NULL);
   pthread_cond_init(&server->state_change, NULL);
-  server->state = INIT;
+  server->state = A_INIT;
   int err = bind_accepter_sock(server);
   if (err == -1) { goto START_SERVER_ERR; }
   memset(server->servlets, 0, sizeof(traft_servlet_s) * MAX_SERVLETS);
   err = pthread_create(&server->accept_thread, NULL, &traft_do_accept, server);
   if (err != 0) { goto START_SERVER_ERR; }
   // wait until serving
-  wait_accepter_state(server, RUN);
+  wait_accepter_state(server, A_RUN);
   *ptr = server;
   return 0;
 
@@ -304,9 +308,9 @@ int traft_stop_server(traft_server server_ptr) {
   // TODO kill all servlets
   // mark to die
   pthread_mutex_lock(&server->servlets_guard);
-  server->state = STOP_REQUESTED;
+  server->state = A_STOP_REQUESTED;
   // wait dead
-  while (server->state != DEAD) {
+  while (server->state != A_DEAD) {
     pthread_cond_wait(&server->state_change, &server->servlets_guard);
   }
   // clean up
@@ -350,17 +354,14 @@ int traft_srv_stop_raftlet(traft_server server_ptr, traft_publickey_t raftlet_id
       break;
     }
   }
+  pthread_mutex_unlock(&server->servlets_guard);
   if (found_servlet == NULL) {
     // No raftlets matched provided raftlet_id
-    goto FAIL;
+    return -1;
   }
-  int err = traft_stop_server(server_ptr);
 
   traft_servlet_s *last_servlet =  &server->servlets[server->num_raftlets - 1];
-
-  FAIL:
-  pthread_mutex_unlock(&server->servlets_guard);
-  return -1;
+  return servlet_stop(last_servlet);
 };
 
 
