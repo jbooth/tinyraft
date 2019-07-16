@@ -74,8 +74,8 @@ int traft_buff_transcode_leader(traft_buff *b, traft_symmetrickey_t message_sess
 /** Verifies an appendentries request via auth tag in header */
 int traft_buff_verify_follower(traft_buff *b);
 
-/** Returns this buffer's first 64 bytes as an appendentries_req */
-traft_appendentry_req traft_buff_get_ae_header(traft_buff *b);
+/** Returns this buffer's first 64 bytes as a generic request */
+traft_req traft_buff_get_header(traft_buff *b);
 
 /**
  *  State machine function.  Decrypts, authenticates and decompresses an encoded message.

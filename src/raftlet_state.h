@@ -29,15 +29,16 @@ extern "C" {
 #include "storage.h"
 
 typedef struct raftlet_state {
+    pthread_mutex_t     guard;
     traft_entry_id      max_committed_local;
     traft_entry_id      quorum_committed;
     traft_entry_id      max_applied_local;
+    uuid_t              cluster_id;
     uint64_t            current_term_id;
     uint64_t            last_snapshot_term_id;
     traft_publickey_t   leader_id;
     traft_publickey_t   last_voted_for;
 } raftlet_state;
-
 
 #ifdef __cplusplus
 }

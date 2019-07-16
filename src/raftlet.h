@@ -27,8 +27,13 @@ extern "C" {
 #include "tinyraft.h"
 #include "wiretypes.h"
 #include "storage.h"
+#include "raftlet_state.h"
 
-int traft_handle_req(void *raftlet, traft_conninfo_t *client, traft_req *request, uint8_t *body);
+typedef struct traft_raftlet {
+  raftlet_state state;
+} traft_raftlet;
+
+int traft_raftlet_handle_req(traft_raftlet *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp);
 
 
 #ifdef __cplusplus

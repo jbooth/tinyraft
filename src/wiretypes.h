@@ -136,34 +136,24 @@ typedef struct init_cluster_req {
   uint8_t     padding[20];  // 56
 } init_cluster_req;
 
-typedef struct add_server_req {
-  uuid_t      db_uniq_id;   // 16
-  uuid_t      peer_id;      // 32
-  uint8_t     padding[24];  // 56
-} add_server_req;
-
-typedef struct request_vote_req {
-  uuid_t        candidate_id; // 16
-  uuid_t        db_uniq_id;   // 32
-  uint64_t      term;         // 40
-  uint64_t      last_log_term;// 48
-  uint32_t      last_log_idx; // 52
-  uint32_t      padding;      // 56
-} request_vote_req;
+typedef struct traft_reqvote_req {
+  uint64_t      proposed_term;    // 8
+  uint64_t      last_log_term;    // 16
+  uint32_t      last_log_idx;     // 20
+  uint8_t       padding[20];      // 40
+  traft_reqinfo info;             // 64
+} traft_reqvote_req;
 
 
-typedef struct would_vote_req {
-  uuid_t        candidate_id; // 16
-  uuid_t        db_uniq_id;   // 32
-  uint64_t      term;         // 40
-  uint64_t      last_log_term;// 48
-  uint32_t      last_log_idx; // 52
-  uint32_t      padding;      // 56
-} would_vote_req;
 
 /** RPC RESPONSES */
 
 #define RPC_RESP_LEN 32
+
+
+typedef struct traft_resp {
+  uint8_t padding[32];
+} traft_resp;
 
 typedef struct append_entries_resp {
   uint64_t committed_term;    // 8     // Last term this follower's committed
@@ -173,9 +163,18 @@ typedef struct append_entries_resp {
   uint8_t  padding[8];        // 32
 } append_entries_resp;
 
-typedef struct traft_resp {
-  uint8_t padding[32];
-} traft_resp;
+typedef struct traft_vote_resp {
+  uint64_t            current_term;     // If vote_granted = 0, this is the actual term
+  uint8_t             vote_granted;     // Whether we granted vote to candidate
+  uint8_t             padding[23];      
+} traft_vote_resp;
+
+typedef struct new_entry_resp {
+  uint64_t  entry_term;
+  uint32_t  entry_idx;
+  uint32_t  orig_client_idx;
+  uint8_t   padding[16];
+} new_entry_resp;
 
 
 #ifdef __cplusplus
