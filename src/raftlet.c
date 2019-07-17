@@ -35,21 +35,21 @@ static int handle_request_vote(traft_raftlet_s *raftlet, traft_conninfo_t *clien
     
     traft_vote_resp *vote_resp = (traft_vote_resp*) resp;
     
-    pthread_mutex_lock(&raftlet->state.guard);
+    traft_rwlock_rdlock(&raftlet->guard);
     // If the proposed entry is more recent than our max, and we haven't already voted for someone else..
-    if (reqvote_req->proposed_term > raftlet->state.current_term_id && 
-        reqvote_req->last_log_term >= raftlet->state.max_committed_local.term_id &&
-        reqvote_req->last_log_idx >= raftlet->state.max_committed_local.idx && 
-        (memcmp(client->client_id, raftlet->state.last_voted_for, sizeof(traft_publickey_t)) == 0  ||
-        memcmp(raftlet->state.last_voted_for, traft_null_pubkey, sizeof(traft_publickey_t)) == 0)) {
+    if (reqvote_req->proposed_term > raftlet->current_term_id && 
+        reqvote_req->last_log_term >= raftlet->max_committed_local.term_id &&
+        reqvote_req->last_log_idx >= raftlet->max_committed_local.idx && 
+        (memcmp(client->client_id, raftlet->last_voted_for, sizeof(traft_publickey_t)) == 0  ||
+        memcmp(raftlet->last_voted_for, traft_null_pubkey, sizeof(traft_publickey_t)) == 0)) {
         // Vote yes
         vote_resp->vote_granted = 1;
     } else {
         // Vote no
         vote_resp->vote_granted = 0;
-        vote_resp->current_term = raftlet->state.current_term_id;
+        vote_resp->current_term = raftlet->current_term_id;
     }
-    pthread_mutex_unlock(&raftlet->state.guard);
+    traft_rwlock_rdunlock(&raftlet->guard);
 
     return 0;
 }

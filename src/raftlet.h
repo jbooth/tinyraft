@@ -29,8 +29,29 @@ extern "C" {
 #include "storage.h"
 #include "raftlet_state.h"
 
-typedef struct traft_raftlet_s {
-  raftlet_state state;
+typedef struct raftlet_state {
+
+} raftlet_state;
+
+
+typedef struct traft_raftlet_s {    
+    traft_rwlock_t     guard;
+    // constant state
+    char                *storage_path; // heap-allocated
+
+    // volatile state, some of this is persisted in the relevant termlog
+    traft_entry_id        max_committed_local;
+    traft_entry_id        quorum_committed;
+    traft_entry_id        max_applied_local;
+    uuid_t                cluster_id;
+    uint64_t              last_snapshot_term_id;
+    traft_publickey_t     leader_id;
+    traft_symmetrickey_t  current_termkey;
+    traft_termlog         current_termlog;
+
+    // persistent state, persisted in storage_path/STATE
+    traft_publickey_t   last_voted_for;
+    uint64_t            current_term_id;
 } traft_raftlet_s;
 
 int traft_raftlet_handle_req(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp);
