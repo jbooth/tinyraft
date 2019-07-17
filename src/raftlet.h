@@ -29,9 +29,9 @@ extern "C" {
 #include "storage.h"
 #include "raftlet_state.h"
 
-typedef struct traft_raftlet {
+typedef struct traft_raftlet_s {
   raftlet_state state;
-} traft_raftlet;
+} traft_raftlet_s;
 
 int traft_raftlet_handle_req(traft_raftlet *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp);
 
