@@ -51,9 +51,10 @@ typedef struct traft_log_entry_md {
  *    Data section containing actual entries in line with their AppendEntriesRequest headers.
  */
 typedef struct traft_termlog {
-  traft_rwlock_t      lock;
-  traft_log_header    *header;
-  traft_log_entry_md  *entries;
+  traft_rwlock_t        lock;
+  traft_symmetrickey_t  termkey;
+  traft_log_header      *header;
+  traft_log_entry_md    *entries;
   size_t map_len; // mmap is shared between header and entries; starts at header and is map_len long
   int entries_fd;
 } traft_termlog;

@@ -14,13 +14,17 @@ static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *clien
 }
 
 static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp) {
+    pthread_mutex_lock(&raftlet->state.guard);
     // check we are leader
-
+    
     // transcode
 
     // check if need to start new termlog
 
+    pthread_mutex_unlock(&raftlet->state.guard);
     // append to current
+
+
     return 0;
 }
 
