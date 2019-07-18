@@ -5,34 +5,47 @@
 #include "raftlet_state.h"
 
 static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp) {
+    pthread_mutex_lock(&raftlet->guard);
+
+    traft_appendentry_req *appendentry_req = (traft_appendentry_req*) header;
+
+    traft_entry_id prev_entry = raftlet->max_committed_local;
     // check that we think is leader
-
+    // check if we need to clear previously-committed entries
     // check if need to start new termlog
+    if ()
 
+    pthread_mutex_unlock(&raftlet->guard);
     // append to current
     return 0;
 }
 
 static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client,  traft_req *header, traft_buff *req, traft_resp *resp) {
-    pthread_mutex_lock(&raftlet->state.guard);
+    pthread_mutex_lock(&raftlet->guard);
     traft_newentry_req *newentry_req = (traft_newentry_req*) header;
-    traft_newentry_resp *newentry_resp = (traft_newentry_req*) resp;
+    traft_newentry_resp *newentry_resp = (traft_newentry_resp*) resp;
     // check we are leader
-    if (strcmp(raftlet->info.raftlet_id, raftlet.leader_id, 32) != 0) {
+    if (memcmp(raftlet->info.my_id, raftlet->leader_id, sizeof(traft_publickey_t)) != 0) {
         // not leader
     }
     // TODO check if need to start new termlog
 
-    traft_entry_id this_entry;
-    traft_entry_id prev_entry;
-    traft_entry_id quorum_entry = raftlet->qu;
+    traft_entry_id prev_entry = raftlet->max_committed_local;
+    traft_entry_id this_entry = raftlet->max_committed_local;
+    this_entry.idx++;
+    traft_entry_id quorum_entry = raftlet->quorum_committed;
+    pthread_mutex_unlock(&raftlet->guard);
 
+    // append to current
     int transcode_err = traft_buff_transcode_leader(req, client->session_key, raftlet->current_termkey, 
                                                     this_entry, prev_entry, raftlet->quorum_committed);
+    
+    traft_termlog_append_entry(&raftlet->current_termlog, req);
 
-    pthread_mutex_unlock(&raftlet->state.guard);
-    // append to current
-    traft_termlog_append_entry(raftlet->current_termlog, req);
+
+    pthread_mutex_lock(&raftlet->guard);
+    raftlet->max_committed_local = this_entry;
+    pthread_mutex_unlock(&raftlet->guard);
 
     return 0;
 }

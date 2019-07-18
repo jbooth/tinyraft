@@ -29,11 +29,6 @@ extern "C" {
 #include "storage.h"
 #include "raftlet_state.h"
 
-typedef struct raftlet_state {
-
-} raftlet_state;
-
-
 typedef struct traft_raftlet_s {    
     traft_rwlock_t     guard;
     // constant state

@@ -169,12 +169,12 @@ typedef struct traft_vote_resp {
   uint8_t             padding[23];      
 } traft_vote_resp;
 
-typedef struct new_entry_resp {
+typedef struct traft_newentry_resp {
   uint64_t  entry_term;
   uint32_t  entry_idx;
   uint32_t  orig_client_idx;
   uint8_t   padding[16];
-} new_entry_resp;
+} traft_newentry_resp;
 
 
 #ifdef __cplusplus
