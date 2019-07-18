@@ -13,17 +13,26 @@ static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *clien
     return 0;
 }
 
-static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp) {
+static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client,  traft_req *header, traft_buff *req, traft_resp *resp) {
     pthread_mutex_lock(&raftlet->state.guard);
+    traft_newentry_req *newentry_req = (traft_newentry_req*) header;
+    traft_newentry_resp *newentry_resp = (traft_newentry_req*) resp;
     // check we are leader
-    
-    // transcode
+    if (strcmp(raftlet->info.raftlet_id, raftlet.leader_id, 32) != 0) {
+        // not leader
+    }
+    // TODO check if need to start new termlog
 
-    // check if need to start new termlog
+    traft_entry_id this_entry;
+    traft_entry_id prev_entry;
+    traft_entry_id quorum_entry = raftlet->qu;
+
+    int transcode_err = traft_buff_transcode_leader(req, client->session_key, raftlet->current_termkey, 
+                                                    this_entry, prev_entry, raftlet->quorum_committed);
 
     pthread_mutex_unlock(&raftlet->state.guard);
     // append to current
-
+    traft_termlog_append_entry(raftlet->current_termlog, req);
 
     return 0;
 }

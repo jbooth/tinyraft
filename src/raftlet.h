@@ -40,6 +40,7 @@ typedef struct traft_raftlet_s {
     char                *storage_path; // heap-allocated
 
     // volatile state, some of this is persisted in the relevant termlog
+    traft_raftletinfo_t   info;
     traft_entry_id        max_committed_local;
     traft_entry_id        quorum_committed;
     traft_entry_id        max_applied_local;
