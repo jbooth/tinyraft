@@ -152,16 +152,17 @@ typedef struct traft_reqvote_req {
 
 
 typedef struct traft_resp {
-  uint8_t padding[32];
+  uint8_t     body[16];
+  uint8_t     mac[16];
 } traft_resp;
 
-typedef struct append_entries_resp {
+typedef struct traft_appendentry_resp {
   uint64_t committed_term;    // 8     // Last term this follower's committed
-  uint64_t quorum_term;       // 16		 // This follower's opinion on what quorum term is
-  uint32_t committed_idx;     // 20		 // Last index this follower's committed
-  uint32_t quorum_idx;        // 24		 // This follower's opinion on quorum idx
-  uint8_t  padding[8];        // 32
-} append_entries_resp;
+  uint32_t committed_idx;     // 12		 // Last index this follower's committed
+  uint8_t  success;           // 13
+  uint8_t  padding[3];        // 16
+  uint8_t  mac[32];        // 32
+} traft_appendentry_resp;
 
 typedef struct traft_vote_resp {
   uint64_t            current_term;     // If vote_granted = 0, this is the actual term

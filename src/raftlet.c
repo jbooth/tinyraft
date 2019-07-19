@@ -4,19 +4,32 @@
 #include "raftlet.h"
 #include "raftlet_state.h"
 
-static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_buff *req, traft_resp *resp) {
-    pthread_mutex_lock(&raftlet->guard);
-
+static int start_new_term(traft_raftlet_s *raftlet, uint64_t new_term_id) {
+    return 0;
+}
+static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_req *header, traft_buff *req, traft_resp *resp) {
     traft_appendentry_req *appendentry_req = (traft_appendentry_req*) header;
-
+    pthread_mutex_lock(&raftlet->guard);
     traft_entry_id prev_entry = raftlet->max_committed_local;
-    // check that we think is leader
-    // check if we need to clear previously-committed entries
-    // check if need to start new termlog
-    if ()
 
+    if (appendentry_req->prev_term > prev_entry.term_id || appendentry_req->prev_idx > prev_entry.idx) {
+        // We're missing entries, return error
+    }
+    if (prev_entry.term_id > appendentry_req->prev_term || prev_entry.idx > appendentry_req->prev_idx) {
+        // We've committed entries that never reached quorum during a leader change, delete them and proceed.
+    }
+    if (appendentry_req->this_term > prev_entry.term_id) {
+        // New term.
+    }
     pthread_mutex_unlock(&raftlet->guard);
-    // append to current
+    int err = traft_termlog_append_entry(&raftlet->current_termlog, req);
+    if (err != 0) { return err; }
+    pthread_mutex_lock(&raftlet->guard);
+    raftlet->max_committed_local.term_id = appendentry_req->this_term;
+    raftlet->max_committed_local.idx = appendentry_req->this_idx;
+    pthread_mutex_unlock(&raftlet->guard);
+    
+    // TODO FILL OUT RESPONSE OBJ
     return 0;
 }
 
@@ -29,7 +42,6 @@ static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, 
         // not leader
     }
     // TODO check if need to start new termlog
-
     traft_entry_id prev_entry = raftlet->max_committed_local;
     traft_entry_id this_entry = raftlet->max_committed_local;
     this_entry.idx++;
@@ -80,11 +92,11 @@ int traft_raftlet_handle_req(traft_raftlet_s *raftlet, traft_conninfo_t *client,
     traft_req req_header = traft_buff_get_header(req);
     switch (req_header.info.req_type) {
         case TRAFT_REQTYPE_APPENDENTRY:
-            return handle_append_entry(raftlet, client, req, resp);
+            return handle_append_entry(raftlet, client, &req_header, req, resp);
         case TRAFT_REQTYPE_REQVOTE:
             return handle_request_vote(raftlet, client, &req_header, req, resp);
         case TRAFT_REQTYPE_NEWENTRY:
-            return handle_new_entry(raftlet, client, req, resp);
+            return handle_new_entry(raftlet, client, &req_header, req, resp);
         default:
             break;
     }

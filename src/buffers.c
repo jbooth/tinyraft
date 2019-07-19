@@ -303,7 +303,7 @@ int traft_buff_transcode_leader(traft_buff *b, uint8_t *message_termkey, uint8_t
 }
 
 traft_req traft_buff_get_header(traft_buff *b) {
-  traft_req *view = (traft_req*) b;
+  traft_req *view = (traft_req*) b->buff;
   return *view;
 }
 
