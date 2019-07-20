@@ -64,10 +64,9 @@ typedef struct traft_raftletinfo_t {
 
 /** Common to all requests, always the last 24 bytes */
 typedef struct traft_reqinfo {
-  uint32_t  body_len;     // 4
-  uint8_t   req_type;     // 5
-  uint8_t   padding[3];   // 8
-  uint8_t   auth_tag[16]; // 24
+  uint8_t   auth_tag[16]; // 16
+  uint32_t  body_len;     // 20
+  uint32_t  req_type;     // 24
 } traft_reqinfo;
 
 /** Generic request with type and length */
@@ -127,14 +126,6 @@ typedef struct traft_appendentry_req {
 #define TRAFT_AE_TERMCHANGE 2
 // Length, from front of struct, of section used as 'additional data' for MAC
 #define append_entries_AD_len 48
-
-
-typedef struct init_cluster_req {
-  uuid_t      db_uniq_id;   // 16
-  uuid_t      leader_id;    // 32
-  uint64_t    curr_Term;    // 36
-  uint8_t     padding[20];  // 56
-} init_cluster_req;
 
 typedef struct traft_reqvote_req {
   uint64_t      proposed_term;    // 8

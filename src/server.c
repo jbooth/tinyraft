@@ -9,7 +9,6 @@
 
 #include "buffers.h"
 #include "wiretypes.h"
-#include "raftlet.h"
 #include "server.h"
 
 /*

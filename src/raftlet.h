@@ -27,15 +27,21 @@ extern "C" {
 #include "tinyraft.h"
 #include "wiretypes.h"
 #include "storage.h"
-#include "raftlet_state.h"
+
+typedef struct traft_leader_s {
+    traft_conninfo_t    follower_conninfo[TRAFT_MAX_PEERS];
+    traft_entry_id      next_to_send[TRAFT_MAX_PEERS];
+    traft_entry_id      max_committed[TRAFT_MAX_PEERS];
+    int8_t              is_leader;
+} traft_leader_s;
 
 typedef struct traft_raftlet_s {    
     traft_rwlock_t     guard;
     // constant state
-    char                *storage_path; // heap-allocated
+    char                  *storage_path; // heap-allocated
+    traft_raftletinfo_t   info;
 
     // volatile state, some of this is persisted in the relevant termlog
-    traft_raftletinfo_t   info;
     traft_entry_id        max_committed_local;
     traft_entry_id        quorum_committed;
     traft_entry_id        max_applied_local;
@@ -44,6 +50,9 @@ typedef struct traft_raftlet_s {
     traft_publickey_t     leader_id;
     traft_symmetrickey_t  current_termkey;
     traft_termlog         current_termlog;
+
+    // volatile state only active on a leader
+    traft_leader_s        leader_state;
 
     // persistent state, persisted in storage_path/STATE
     traft_publickey_t   last_voted_for;

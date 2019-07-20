@@ -2,7 +2,6 @@
 
 #include "tinyraft.h"
 #include "buffers.h"
-#include "raftlet.h"
 #include "wiretypes.h"
 
 #ifdef __cplusplus

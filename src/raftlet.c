@@ -2,11 +2,14 @@
 #include "wiretypes.h"
 #include "buffers.h"
 #include "raftlet.h"
-#include "raftlet_state.h"
 
 static int start_new_term(traft_raftlet_s *raftlet, uint64_t new_term_id) {
+    // Roll over termlog handle
+
+    // Persist CURRENT_TERM
     return 0;
 }
+
 static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_req *header, traft_buff *req, traft_resp *resp) {
     traft_appendentry_req *appendentry_req = (traft_appendentry_req*) header;
     pthread_mutex_lock(&raftlet->guard);
@@ -78,6 +81,7 @@ static int handle_request_vote(traft_raftlet_s *raftlet, traft_conninfo_t *clien
         memcmp(raftlet->last_voted_for, traft_null_pubkey, sizeof(traft_publickey_t)) == 0)) {
         // Vote yes
         vote_resp->vote_granted = 1;
+        // TODO persist voted_for
     } else {
         // Vote no
         vote_resp->vote_granted = 0;
