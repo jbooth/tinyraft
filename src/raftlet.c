@@ -38,12 +38,13 @@ static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *clien
     appendentry_resp->committed_term = appendentry_req->this_term;
     appendentry_resp->committed_idx = appendentry_req->this_idx;
     appendentry_resp->success = 1;
+
     pthread_mutex_lock(&raftlet->guard);
     raftlet->max_committed_local.term_id = appendentry_req->this_term;
     raftlet->max_committed_local.idx = appendentry_req->this_idx;
+    // TODO write state
     pthread_mutex_unlock(&raftlet->guard);
     
-    // TODO FILL OUT RESPONSE OBJ
 
     AE_DONE:
     return 0;
