@@ -32,24 +32,32 @@ typedef struct traft_leader_s {
     traft_conninfo_t    follower_conninfo[TRAFT_MAX_PEERS];
     traft_entry_id      next_to_send[TRAFT_MAX_PEERS];
     traft_entry_id      max_committed[TRAFT_MAX_PEERS];
-    int8_t              is_leader;
 } traft_leader_s;
 
-typedef struct traft_raftlet_s {    
-    traft_rwlock_t     guard;
+
+typedef enum traft_raftlet_mode{
+    TRAFT_RAFTLET_MODE_LEADER,
+    TRAFT_RAFTLET_MODE_CANDIDATE,
+    TRAFT_RAFTLET_MODE_FOLLOWER
+} traft_raftlet_mode;
+
+typedef struct traft_raftlet_s {
+    pthread_mutex_t       guard;
+    pthread_cond_t        changed;
+
     // constant state
     char                  *storage_path; // heap-allocated
     traft_raftletinfo_t   info;
 
-    // volatile state, some of this is persisted in the relevant termlog
+    // volatile state
     traft_entry_id        max_committed_local;
     traft_entry_id        quorum_committed;
     traft_entry_id        max_applied_local;
     uuid_t                cluster_id;
-    uint64_t              last_snapshot_term_id;
     traft_publickey_t     leader_id;
     traft_symmetrickey_t  current_termkey;
     traft_termlog         current_termlog;
+    traft_raftlet_mode    mode;                     
 
     // volatile state only active on a leader
     traft_leader_s        leader_state;

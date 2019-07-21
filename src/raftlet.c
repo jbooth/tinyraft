@@ -3,6 +3,9 @@
 #include "buffers.h"
 #include "raftlet.h"
 
+// Deletes all entries >= new_entry.
+static int truncate_logs(traft_raftlet_s *raftlet, traft_entry_id new_entry);
+
 static int start_new_term(traft_raftlet_s *raftlet, uint64_t new_term_id) {
     // Roll over termlog handle
 
@@ -16,6 +19,7 @@ static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *clien
     traft_appendentry_resp *appendentry_resp = (traft_appendentry_resp*) resp;
     pthread_mutex_lock(&raftlet->guard);
     traft_entry_id raftlet_prev_entry = raftlet->max_committed_local;
+    int err = 0;
 
     if (appendentry_req->prev_term > raftlet_prev_entry.term_id || appendentry_req->prev_idx > raftlet_prev_entry.idx) {
         // We're missing entries, tell leader to replay them.
@@ -26,14 +30,21 @@ static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *clien
     }
     if (raftlet_prev_entry.term_id > appendentry_req->prev_term || raftlet_prev_entry.idx > appendentry_req->prev_idx) {
         // We've committed entries ahead of this one but this is valid leader, must have been election, delete them and proceed.
+        err = truncate_logs(raftlet, (traft_entry_id) {.term_id = appendentry_req->this_term, .idx = appendentry_req->this_idx});
+        if (err != 0) {
+            appendentry_resp->success = 0;
+        }
     }
     if (appendentry_req->this_term > raftlet_prev_entry.term_id) {
         // New term.
     }
     pthread_mutex_unlock(&raftlet->guard);
 
-    int err = traft_termlog_append_entry(&raftlet->current_termlog, req);
-    if (err != 0) { return err; }
+    err = traft_termlog_append_entry(&raftlet->current_termlog, req);
+    if (err != 0) { 
+        // Disk error, mark shutdown
+        return err; 
+    }
     
     appendentry_resp->committed_term = appendentry_req->this_term;
     appendentry_resp->committed_idx = appendentry_req->this_idx;
@@ -69,13 +80,18 @@ static int handle_new_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, 
     int transcode_err = traft_buff_transcode_leader(req, client->session_key, raftlet->current_termkey, 
                                                     this_entry, prev_entry, raftlet->quorum_committed);
     
-    traft_termlog_append_entry(&raftlet->current_termlog, req);
+
+    int err = traft_termlog_append_entry(&raftlet->current_termlog, req);
 
 
     pthread_mutex_lock(&raftlet->guard);
     raftlet->max_committed_local = this_entry;
+    pthread_cond_broadcast(&raftlet->changed);
     pthread_mutex_unlock(&raftlet->guard);
 
+    newentry_resp->entry_term = this_entry.term_id;
+    newentry_resp->entry_idx = this_entry.idx;
+    newentry_resp->orig_client_idx = newentry_req->client_idx;
     return 0;
 }
 
