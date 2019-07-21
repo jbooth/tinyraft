@@ -51,7 +51,7 @@ typedef struct traft_log_entry_md {
  *    Data section containing actual entries in line with their AppendEntriesRequest headers.
  */
 typedef struct traft_termlog {
-  traft_rwlock_t        lock;
+  pthread_mutex_t       header_guard;
   traft_symmetrickey_t  termkey;
   traft_log_header      *header;
   traft_log_entry_md    *entries;

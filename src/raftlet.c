@@ -9,30 +9,43 @@ static int start_new_term(traft_raftlet_s *raftlet, uint64_t new_term_id) {
     // Persist CURRENT_TERM
     return 0;
 }
+int traft_raftlet_wait_more(traft_entry_id last_entry, traft_entry_id *new_entry, uint64_t timeoutMS);
 
 static int handle_append_entry(traft_raftlet_s *raftlet, traft_conninfo_t *client, traft_req *header, traft_buff *req, traft_resp *resp) {
     traft_appendentry_req *appendentry_req = (traft_appendentry_req*) header;
+    traft_appendentry_resp *appendentry_resp = (traft_appendentry_resp*) resp;
     pthread_mutex_lock(&raftlet->guard);
-    traft_entry_id prev_entry = raftlet->max_committed_local;
+    traft_entry_id raftlet_prev_entry = raftlet->max_committed_local;
 
-    if (appendentry_req->prev_term > prev_entry.term_id || appendentry_req->prev_idx > prev_entry.idx) {
-        // We're missing entries, return error
+    if (appendentry_req->prev_term > raftlet_prev_entry.term_id || appendentry_req->prev_idx > raftlet_prev_entry.idx) {
+        // We're missing entries, tell leader to replay them.
+        appendentry_resp->committed_term = raftlet_prev_entry.term_id;
+        appendentry_resp->committed_idx = raftlet_prev_entry.idx;
+        appendentry_resp->success = 0;
+        goto AE_DONE;
     }
-    if (prev_entry.term_id > appendentry_req->prev_term || prev_entry.idx > appendentry_req->prev_idx) {
-        // We've committed entries that never reached quorum during a leader change, delete them and proceed.
+    if (raftlet_prev_entry.term_id > appendentry_req->prev_term || raftlet_prev_entry.idx > appendentry_req->prev_idx) {
+        // We've committed entries ahead of this one but this is valid leader, must have been election, delete them and proceed.
     }
-    if (appendentry_req->this_term > prev_entry.term_id) {
+    if (appendentry_req->this_term > raftlet_prev_entry.term_id) {
         // New term.
     }
     pthread_mutex_unlock(&raftlet->guard);
+
     int err = traft_termlog_append_entry(&raftlet->current_termlog, req);
     if (err != 0) { return err; }
+    
+    appendentry_resp->committed_term = appendentry_req->this_term;
+    appendentry_resp->committed_idx = appendentry_req->this_idx;
+    appendentry_resp->success = 1;
     pthread_mutex_lock(&raftlet->guard);
     raftlet->max_committed_local.term_id = appendentry_req->this_term;
     raftlet->max_committed_local.idx = appendentry_req->this_idx;
     pthread_mutex_unlock(&raftlet->guard);
     
     // TODO FILL OUT RESPONSE OBJ
+
+    AE_DONE:
     return 0;
 }
 
