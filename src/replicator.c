@@ -12,14 +12,6 @@
 #include "storage.h"
 
 
-static generic_req heartbeat_request() {
-  generic_req heartbeat_req;
-  heartbeat_req.info.opcode = OPCODE_append_entries;
-  heartbeat_req.message.append_entries.this_term = 0;
-  heartbeat_req.message.append_entries.this_idx = 0;
-	return heartbeat_req;
-}
-
 static void mark_down(logsender *sender, char *message, int8_t err_no) {
   pthread_spin_lock(&sender->statelock);
   close(sender->follower_fd);
