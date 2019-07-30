@@ -74,6 +74,7 @@ typedef struct traft_req {
   uint8_t       padding[40];  // 40 type-specific data
   traft_reqinfo info;         // 64
 } traft_req;
+
 #define RPC_REQ_LEN 64 
 
 /** First message sent for any session. */

@@ -28,13 +28,6 @@ extern "C" {
 #include "wiretypes.h"
 #include "storage.h"
 
-typedef struct traft_leader_s {
-    traft_conninfo_t    follower_conninfo[TRAFT_MAX_PEERS];
-    traft_entry_id      next_to_send[TRAFT_MAX_PEERS];
-    traft_entry_id      max_committed[TRAFT_MAX_PEERS];
-} traft_leader_s;
-
-
 #define TRAFT_MAX_PIPELINE_REQ 32
 typedef struct traft_client_s {
     int                 fd;
@@ -71,7 +64,6 @@ typedef struct traft_raftlet_s {
     traft_termlog         current_termlog;
     traft_raftlet_mode    mode;
 
-    traft_leader_s        leader_state;
     traft_client_s        client_state;
 
 
@@ -87,6 +79,17 @@ int traft_raftlet_send(traft_buff *newentry_request, uint32_t *request_id);
 
 /** Awaits a pending request, writing the response, if any, to response_buff */
 int traft_raftlet_await(uint32_t request_id, uint8_t *response_buff, size_t max_response_len);
+
+/** 
+ * Blocks until the log has surpassed the provided values.  
+ * Writes new values to provided locations before returning.
+ */
+int traft_raftlet_waitnext(traft_raftlet *raftlet, 
+                            traft_entry_id *quorum_commit, 
+                            traft_entry_id *local_commit,
+                            int max_wait_ms);
+
+
 
 /** Used to spin off another thread which will, if we are leader, replicate entries to all followers. */
 void* traft_replicate(void *raftlet);

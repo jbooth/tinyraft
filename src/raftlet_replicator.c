@@ -8,9 +8,98 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "replicator.h"
-#include "storage.h"
+#include "raftlet.h"
 
+struct replication_set {
+  pthread_mutex_t     guard;
+  pthread_cond_t      changed;
+  traft_raftlet_s     *raftlet;
+};
+
+struct follower_repl_state {
+  pthread_t               send_thread;
+  traft_conninfo_t        conninfo;
+  traft_entry_id          remote_committed;
+  traft_entry_id          last_sent;
+  int                     fd;
+  struct replication_set  *r_set;
+};
+
+static void get_next_to_send(struct follower_repl_state *follower_state, traft_entry_id *next_to_send);
+
+static int is_later(traft_entry_id later, traft_entry_id sooner) {
+  return (later.term_id > sooner.term_id || (later.term_id == sooner.term_id && later.idx > sooner.idx));
+};
+
+/** Reads last_sent and sends up to quorum_entry, re-setting last_sent in the process */
+static int follower_send_some(struct follower_repl_state *follower, traft_entry_id quorum_entry) {
+  pthread_mutex_lock(&follower->r_set->guard);
+  traft_entry_id last_sent = follower->last_sent;
+  traft_raftlet *raftlet = follower->r_set->raftlet;
+  int send_fd = follower->fd;
+  pthread_mutex_unlock(&follower->r_set->guard);
+
+  int err = traft_raftlet_send_to(raftlet, send_fd, &last_sent, quorum_entry);
+  if (err != 0) { return err; }
+
+  pthread_mutex_lock(&follower->r_set->guard);
+  follower->last_sent = last_sent;
+  pthread_mutex_unlock(&follower->r_set->guard);
+}
+
+static void* send_follower(void *arg) {
+  struct follower_repl_state *state = (struct follower_repl_state*)arg;
+  
+  pthread_mutex_lock(&state->r_set->guard);
+  int send_fd = state->fd;
+  traft_raftlet *raftlet = state->r_set->raftlet;
+  pthread_mutex_unlock(&state->r_set->guard);
+
+  traft_entry_id quorum_commit = { .term_id = 0, .idx = 0 };
+  traft_entry_id local_commit = {.term_id = 0, .idx = 0 };
+  traft_entry_id last_sent = {.term_id = 0, .idx = 0 };
+
+  // TODO send hello and initial request, read response
+
+  // TODO schedule FD with response_reader
+
+  
+
+  while (traft_raftlet_waitnext(raftlet, &quorum_commit, &local_commit, /* max_wait_ms= */ 200) == 0) {
+    // Send heartbeat
+    traft_appendentry_req heartbeat = {
+      .this_term = 0,
+      .this_idx = 0,
+      .info.body_len = 0,
+      .prev_term = last_sent.term_id,
+      .prev_idx = last_sent.idx,
+      .quorum_term = quorum_commit.term_id,
+      .quorum_idx = quorum_commit.idx,
+    };
+    // Send entries if we're ahead
+    while (is_later(local_commit, last_sent)) {
+      if (traft_raftlet_send_messages(&last_sent, &local_commit, send_fd) != 0) {
+        goto SEND_FAIL;
+      }
+      pthread_mutex_lock(&state->r_set->guard);
+      state->last_sent = last_sent;
+      pthread_mutex_unlock(&state->r_set->guard);
+    }
+  }
+  SEND_FAIL:
+  return NULL;
+}
+
+void * traft_replicate(void *arg) {
+  traft_raftlet *raftlet = (traft_raftlet*) arg;
+  replication_set *r_set = malloc(sizeof(replication_set))
+  
+  while (1) {
+    // check configs
+
+    // ensure all threads running
+  }
+}
 
 static void mark_down(logsender *sender, char *message, int8_t err_no) {
   pthread_spin_lock(&sender->statelock);
