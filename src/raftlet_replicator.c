@@ -10,20 +10,90 @@
 
 #include "raftlet.h"
 
-struct replication_set {
-  pthread_mutex_t     guard;
-  pthread_cond_t      changed;
-  traft_raftlet_s     *raftlet;
-};
-
-struct follower_repl_state {
+struct logsender {
   pthread_t               send_thread;
   traft_conninfo_t        conninfo;
-  traft_entry_id          remote_committed;
   traft_entry_id          last_sent;
+  traft_entry_id          last_acked;
   int                     fd;
-  struct replication_set  *r_set;
 };
+
+struct replication_state {
+  traft_raftlet_s     *raftlet;
+  pthread_t           follower_resp_reader;
+  pthread_t           state_updater;
+  struct logsender    followers[TRAFT_MAX_PEERS];
+};
+
+static void * write_follower(void *arg) {
+  struct logsender *sender = (struct logsender*) arg;
+  
+  // send initial heartbeat
+
+
+  traft_entry_id to_send_start, to_send_end = (traft_entry_id) {.term_id = 0, .idx = 0};
+
+  
+
+  // re-used to send heartbeat reqs
+  generic_req heartbeat_req = heartbeat_request();
+
+  pthread_spin_lock(&sender->statelock);
+  int follower_fd = sender->follower_fd;
+  log_set *entries_store = sender->entries;
+  int64_t heartbeat_interval_ms = sender->heartbeat_interval_ms;
+  pthread_spin_unlock(&sender->statelock);
+
+  while(1) {
+    struct timeval now;
+
+    if (to_send.count > 0) {
+      // Entries are available, send them.
+      if (send_entries(follower_fd, entries_store, &to_send) == -1) {
+        mark_down(sender, "Error sending entries", errno);
+        return NULL;
+      }
+      gettimeofday(&now, NULL);
+      pthread_spin_lock(&sender->statelock);
+      sender->last_write_time = now;
+      pthread_spin_unlock(&sender->statelock);
+    } else { 
+      // Check if heartbeat is warranted.
+      traft_entry_id quorum_entry_id = get_quorum_id(entries_store);
+      pthread_spin_lock(&sender->statelock);
+      struct timeval prev_write_time = sender->last_write_time;
+      traft_entry_id follower_quorum_opinion = sender->remote_quorum;
+      pthread_spin_unlock(&sender->statelock);
+
+      gettimeofday(&now, NULL);
+      int64_t time_since_heartbeat_ms = (now.tv_sec - prev_write_time.tv_sec) * 1000;
+      time_since_heartbeat_ms += (now.tv_usec - prev_write_time.tv_usec) / 1000;
+
+      // If heartbeat interval has elapsed or if we have new quorum info to send, send heartbeat
+      if (time_since_heartbeat_ms >= heartbeat_interval_ms
+          || (follower_quorum_opinion.term_id < quorum_entry_id.term_id
+                || follower_quorum_opinion.idx < quorum_entry_id.idx)) {
+        heartbeat_req.message.append_entries.quorum_term = quorum_entry_id.term_id;
+        heartbeat_req.message.append_entries.quorum_idx = quorum_entry_id.idx;
+        int err = send_req_raw(follower_fd, &heartbeat_req);
+        if (err == -1) {
+          mark_down(sender, "Error sending heartbeat", errno);
+          return NULL;
+        }
+        gettimeofday(&now, NULL);
+        pthread_spin_lock(&sender->statelock);
+        sender->last_write_time = now;
+        pthread_spin_unlock(&sender->statelock);
+
+      } else {
+        // Block for more entries, up until our next deadline for heartbeat.
+        int64_t sleep_time_ms = heartbeat_interval_ms - time_since_heartbeat_ms;
+        // TODO limit this to max inflight
+        wait_more(entries_store, &to_send, 16, sleep_time_ms);
+      }
+    }
+  } // while(1)
+}
 
 static void get_next_to_send(struct follower_repl_state *follower_state, traft_entry_id *next_to_send);
 
@@ -37,6 +107,8 @@ static int follower_send_some(struct follower_repl_state *follower, traft_entry_
   traft_entry_id last_sent = follower->last_sent;
   traft_raftlet *raftlet = follower->r_set->raftlet;
   int send_fd = follower->fd;
+  send_queue to_send;
+  memset(&to_send, 0, sizeof(send_queue));
   pthread_mutex_unlock(&follower->r_set->guard);
 
   int err = traft_raftlet_send_to(raftlet, send_fd, &last_sent, quorum_entry);
@@ -113,71 +185,7 @@ static void mark_down(logsender *sender, char *message, int8_t err_no) {
   pthread_spin_unlock(&sender->statelock);
 }
 
-static void * write_follower(void *arg) {
-  logsender *sender = (logsender*) arg;
-  // manages state of pending file transfers
-  send_queue to_send;
-  memset(&to_send, 0, sizeof(send_queue));
 
-  // re-used to send heartbeat reqs
-  generic_req heartbeat_req = heartbeat_request();
-
-  pthread_spin_lock(&sender->statelock);
-  int follower_fd = sender->follower_fd;
-  log_set *entries_store = sender->entries;
-  int64_t heartbeat_interval_ms = sender->heartbeat_interval_ms;
-  pthread_spin_unlock(&sender->statelock);
-
-  while(1) {
-    struct timeval now;
-
-    if (to_send.count > 0) {
-      // Entries are available, send them.
-      if (send_entries(follower_fd, entries_store, &to_send) == -1) {
-        mark_down(sender, "Error sending entries", errno);
-        return NULL;
-      }
-      gettimeofday(&now, NULL);
-      pthread_spin_lock(&sender->statelock);
-      sender->last_write_time = now;
-      pthread_spin_unlock(&sender->statelock);
-    } else { 
-      // Check if heartbeat is warranted.
-      traft_entry_id quorum_entry_id = get_quorum_id(entries_store);
-      pthread_spin_lock(&sender->statelock);
-      struct timeval prev_write_time = sender->last_write_time;
-      traft_entry_id follower_quorum_opinion = sender->remote_quorum;
-      pthread_spin_unlock(&sender->statelock);
-
-      gettimeofday(&now, NULL);
-      int64_t time_since_heartbeat_ms = (now.tv_sec - prev_write_time.tv_sec) * 1000;
-      time_since_heartbeat_ms += (now.tv_usec - prev_write_time.tv_usec) / 1000;
-
-      // If heartbeat interval has elapsed or if we have new quorum info to send, send heartbeat
-      if (time_since_heartbeat_ms >= heartbeat_interval_ms
-          || (follower_quorum_opinion.term_id < quorum_entry_id.term_id
-                || follower_quorum_opinion.idx < quorum_entry_id.idx)) {
-        heartbeat_req.message.append_entries.quorum_term = quorum_entry_id.term_id;
-        heartbeat_req.message.append_entries.quorum_idx = quorum_entry_id.idx;
-        int err = send_req_raw(follower_fd, &heartbeat_req);
-        if (err == -1) {
-          mark_down(sender, "Error sending heartbeat", errno);
-          return NULL;
-        }
-        gettimeofday(&now, NULL);
-        pthread_spin_lock(&sender->statelock);
-        sender->last_write_time = now;
-        pthread_spin_unlock(&sender->statelock);
-
-      } else {
-        // Block for more entries, up until our next deadline for heartbeat.
-        int64_t sleep_time_ms = heartbeat_interval_ms - time_since_heartbeat_ms;
-        // TODO limit this to max inflight
-        wait_more(entries_store, &to_send, 16, sleep_time_ms);
-      }
-    }
-  } // while(1)
-}
 
 
 // Connects a sender and initializes fields
